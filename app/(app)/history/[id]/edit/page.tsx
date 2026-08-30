@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+
 import { requireSession } from "@/lib/auth/dal";
 import { getMigraineById } from "@/lib/migraines/repository";
 import { formatLocalDate } from "@/lib/migraines/format";
@@ -26,12 +28,13 @@ export default async function EditEpisodePage(
   if (!migraine) notFound();
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-4">
       <Link
         href={`/history/${migraine.id}`}
-        className="text-muted-foreground text-sm underline underline-offset-4"
+        className="text-body-sm text-muted-foreground hover:text-primary-strong -ml-1 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1 transition-colors"
       >
-        &larr; Back to {formatLocalDate(migraine.timing.startedAtLocal)}
+        <ArrowLeft aria-hidden className="size-4" />
+        Back to {formatLocalDate(migraine.timing.startedAtLocal)}
       </Link>
 
       <LogWizard

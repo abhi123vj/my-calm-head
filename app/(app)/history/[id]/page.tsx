@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft, FileText, Pencil } from "lucide-react";
+
 import { requireSession } from "@/lib/auth/dal";
 import { getMigraineById } from "@/lib/migraines/repository";
 import { labelFor } from "@/lib/migraines/catalog";
 import { formatLocalDate } from "@/lib/migraines/format";
 import { EpisodeSummary } from "@/components/history/episode-summary";
 import { DeleteEpisode } from "@/components/history/delete-episode";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 
 export async function generateMetadata(
@@ -35,41 +38,47 @@ export default async function EpisodePage(props: PageProps<"/history/[id]">) {
     : "Episode";
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        <Link
-          href="/history"
-          className="text-muted-foreground text-sm underline underline-offset-4"
-        >
-          &larr; Back to history
-        </Link>
+    <div className="mx-auto w-full max-w-3xl space-y-5">
+      <Link
+        href="/history"
+        className="text-body-sm text-muted-foreground hover:text-primary-strong -ml-1 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1 transition-colors"
+      >
+        <ArrowLeft aria-hidden className="size-4" />
+        Back to history
+      </Link>
 
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            <p className="text-muted-foreground">
-              {formatLocalDate(migraine.timing.startedAtLocal)}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/history/${migraine.id}/edit`}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              {migraine.status === "draft" ? "Continue this draft" : "Edit"}
-            </Link>
-            <DeleteEpisode id={migraine.id} />
-          </div>
+      <header className="space-y-4">
+        <div className="min-w-0 space-y-1">
+          <h1 className="text-title text-balance">{title}</h1>
+          <p className="text-body-sm text-muted-foreground">
+            {formatLocalDate(migraine.timing.startedAtLocal)}
+          </p>
         </div>
 
-        {migraine.status === "draft" ? (
-          <p className="rounded-lg border border-dashed px-3 py-2 text-sm">
-            This episode is saved as a draft. Some questions were left
-            unanswered.
-          </p>
-        ) : null}
-      </div>
+        {/* Edit is the action you came here for; delete sits beside it but
+            never gets the emphasis. Both are full width on a phone. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+          <Link
+            href={`/history/${migraine.id}/edit`}
+            className={buttonVariants({ variant: "secondary" })}
+          >
+            <Pencil aria-hidden />
+            {migraine.status === "draft" ? "Continue this draft" : "Edit"}
+          </Link>
+          <DeleteEpisode id={migraine.id} />
+        </div>
+      </header>
+
+      {migraine.status === "draft" ? (
+        <Alert>
+          <FileText aria-hidden />
+          <AlertTitle>Saved as a draft</AlertTitle>
+          <AlertDescription>
+            Some questions were left unanswered. Continuing the draft picks up
+            where you stopped.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <EpisodeSummary migraine={migraine} />
     </div>

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+
 import { requireSession } from "@/lib/auth/dal";
 import { listMigraines } from "@/lib/migraines/repository";
 import {
@@ -46,40 +48,47 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const next = shiftMonth(month, 1);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">{monthLabel(month)}</h1>
-          <p className="text-muted-foreground text-sm">
-            {episodes.length === 0
-              ? "No episodes in this view."
-              : `${episodes.length} episode${episodes.length === 1 ? "" : "s"} shown`}
-          </p>
-        </div>
-
-        <nav className="flex items-center gap-2">
+    <div className="space-y-5">
+      {/* Prev and next are icon buttons flanking the title rather than named
+          links in a row. At 320px "← December  Today  January →" wrapped onto
+          two lines and pushed the grid down the screen. */}
+      <header className="space-y-2">
+        <div className="flex items-center gap-2">
           <Link
             href={calendarHref(previous)}
             aria-label={`Go to ${monthLabel(previous)}`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={buttonVariants({ variant: "outline", size: "icon" })}
           >
-            &larr; {monthLabel(previous).split(" ")[0]}
+            <ChevronLeft aria-hidden />
           </Link>
+
+          <h1 className="text-title min-w-0 flex-1 truncate text-center">
+            {monthLabel(month)}
+          </h1>
+
+          <Link
+            href={calendarHref(next)}
+            aria-label={`Go to ${monthLabel(next)}`}
+            className={buttonVariants({ variant: "outline", size: "icon" })}
+          >
+            <ChevronRight aria-hidden />
+          </Link>
+        </div>
+
+        <div className="flex items-center justify-center gap-1">
+          <span className="text-body-sm text-muted-foreground">
+            {episodes.length === 0
+              ? "No episodes in this view"
+              : `${episodes.length} episode${episodes.length === 1 ? "" : "s"} shown`}
+          </span>
           <Link
             href="/calendar"
             className={buttonVariants({ variant: "ghost", size: "sm" })}
           >
             Today
           </Link>
-          <Link
-            href={calendarHref(next)}
-            aria-label={`Go to ${monthLabel(next)}`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            {monthLabel(next).split(" ")[0]} &rarr;
-          </Link>
-        </nav>
-      </div>
+        </div>
+      </header>
 
       <MonthGrid
         month={month}
@@ -94,12 +103,13 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
           episodes={episodesByDate.get(selectedDate) ?? []}
         />
       ) : (
-        <p className="text-muted-foreground text-sm">
+        <p className="border-border bg-card text-body-sm text-muted-foreground flex items-center gap-2.5 rounded-xl border border-dashed px-4 py-3.5">
+          <CalendarDays aria-hidden className="text-lavender-deep size-5 shrink-0" />
           Select a highlighted date to see the episodes recorded on it.
         </p>
       )}
 
-      <p className="text-muted-foreground text-xs">
+      <p className="text-caption text-muted-foreground">
         Episodes appear on the date they started. One that ran past midnight is
         still shown once, on its start date.
       </p>

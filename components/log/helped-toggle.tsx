@@ -1,7 +1,7 @@
 "use client";
 
 import type { HelpedValue } from "@/lib/migraines/catalog";
-import { cn } from "@/lib/utils";
+import { Chip, ChipGroup } from "@/components/ui/chip";
 
 /**
  * Three-state "did it help?" control.
@@ -22,23 +22,15 @@ export function HelpedToggle({
   labels: Record<HelpedValue, string>;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <ChipGroup>
       {options.map((option) => (
-        <button
+        <Chip
           key={option}
-          type="button"
-          aria-pressed={value === option}
+          label={labels[option]}
+          selected={value === option}
           onClick={() => onChange(value === option ? null : option)}
-          className={cn(
-            "rounded-full border px-3 py-1 text-sm transition-colors",
-            value === option
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-input hover:bg-muted",
-          )}
-        >
-          {labels[option]}
-        </button>
+        />
       ))}
-    </div>
+    </ChipGroup>
   );
 }

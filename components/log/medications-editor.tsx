@@ -1,6 +1,7 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Pill, Plus, Trash2 } from "lucide-react";
+
 import {
   COMMON_MEDICATIONS,
   HELPED_LABELS,
@@ -10,8 +11,9 @@ import {
 import type { MedicationDraft } from "@/components/log/wizard-state";
 import { HelpedToggle } from "@/components/log/helped-toggle";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const MEDICATION_LIST_ID = "common-medications";
@@ -63,17 +65,26 @@ export function MedicationsEditor({
       </datalist>
 
       {medications.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No medication recorded for this episode.
-        </p>
+        <EmptyState
+          icon={Pill}
+          title="No medication recorded"
+          description="Add anything you took for this episode, including the time and whether it helped."
+          action={
+            <Button type="button" onClick={add}>
+              <Plus aria-hidden />
+              Add medication
+            </Button>
+          }
+        />
       ) : null}
 
       {medications.map((medication, index) => (
-        <div key={medication.key} className="space-y-3 rounded-lg border p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-xs font-medium uppercase">
-              Medication {index + 1}
-            </span>
+        <div
+          key={medication.key}
+          className="border-border bg-card space-y-4 rounded-xl border p-4 shadow-card"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="eyebrow">Medication {index + 1}</span>
             <Button
               type="button"
               variant="ghost"
@@ -87,9 +98,12 @@ export function MedicationsEditor({
             </Button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={`${medication.key}-name`}>Name</Label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Name"
+              htmlFor={`${medication.key}-name`}
+              className="sm:col-span-2"
+            >
               <Input
                 id={`${medication.key}-name`}
                 list={MEDICATION_LIST_ID}
@@ -99,10 +113,13 @@ export function MedicationsEditor({
                   update(medication.key, { name: event.target.value })
                 }
               />
-            </div>
+            </Field>
 
-            <div className="space-y-1.5">
-              <Label htmlFor={`${medication.key}-dosage`}>Dosage</Label>
+            <Field
+              label="Dosage"
+              htmlFor={`${medication.key}-dosage`}
+              className="sm:col-span-2"
+            >
               <Input
                 id={`${medication.key}-dosage`}
                 value={medication.dosage}
@@ -111,10 +128,9 @@ export function MedicationsEditor({
                   update(medication.key, { dosage: event.target.value })
                 }
               />
-            </div>
+            </Field>
 
-            <div className="space-y-1.5">
-              <Label htmlFor={`${medication.key}-date`}>Date taken</Label>
+            <Field label="Date taken" htmlFor={`${medication.key}-date`}>
               <Input
                 id={`${medication.key}-date`}
                 type="date"
@@ -123,10 +139,9 @@ export function MedicationsEditor({
                   update(medication.key, { takenDate: event.target.value })
                 }
               />
-            </div>
+            </Field>
 
-            <div className="space-y-1.5">
-              <Label htmlFor={`${medication.key}-time`}>Time taken</Label>
+            <Field label="Time taken" htmlFor={`${medication.key}-time`}>
               <Input
                 id={`${medication.key}-time`}
                 type="time"
@@ -135,11 +150,10 @@ export function MedicationsEditor({
                   update(medication.key, { takenTime: event.target.value })
                 }
               />
-            </div>
+            </Field>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Did it help?</Label>
+          <FieldGroup label="Did it help?">
             <HelpedToggle
               value={medication.helped}
               onChange={(helped: HelpedValue | null) =>
@@ -148,10 +162,9 @@ export function MedicationsEditor({
               options={HELPED_VALUES}
               labels={HELPED_LABELS}
             />
-          </div>
+          </FieldGroup>
 
-          <div className="space-y-1.5">
-            <Label htmlFor={`${medication.key}-notes`}>Notes</Label>
+          <Field label="Notes" htmlFor={`${medication.key}-notes`}>
             <Textarea
               id={`${medication.key}-notes`}
               rows={2}
@@ -161,13 +174,16 @@ export function MedicationsEditor({
                 update(medication.key, { notes: event.target.value })
               }
             />
-          </div>
+          </Field>
         </div>
       ))}
 
-      <Button type="button" variant="outline" onClick={add}>
-        + Add medication
-      </Button>
+      {medications.length > 0 ? (
+        <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={add}>
+          <Plus aria-hidden />
+          Add another medication
+        </Button>
+      ) : null}
     </div>
   );
 }

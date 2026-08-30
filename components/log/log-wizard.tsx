@@ -2,9 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Pencil } from "lucide-react";
+
 import {
   DURATION_BANDS,
   HEADACHE_TYPES,
+  MAX_SEVERITY,
+  MIN_SEVERITY,
   PAIN_LOCATIONS,
   POSSIBLE_TRIGGERS,
   SEVERITY_ANCHOR_HIGH,
@@ -20,6 +24,7 @@ import {
   type TimePrecision,
 } from "@/lib/migraines/catalog";
 import { formatDuration } from "@/lib/time";
+import { severityBand } from "@/lib/migraines/severity-scale";
 import { saveMigraine, saveMigraineEdit } from "@/lib/actions/migraines";
 import {
   createInitialState,
@@ -37,8 +42,10 @@ import { MidasEditor, MidasScoreCard } from "@/components/log/midas-editor";
 import { scoreMidas } from "@/lib/midas";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { CheckboxField } from "@/components/ui/checkbox-field";
+import { Chip, ChipGroup } from "@/components/ui/chip";
+import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -111,31 +118,27 @@ export function LogWizard({
     });
   };
 
-  return (
-    <div className="space-y-6">
-      <StepProgress
-        stepIndex={stepIndex}
-        onJump={setStepIndex}
-        title={step.title}
-      />
+  const goTo = (index: number) => {
+    setStepIndex(index);
+    // A step change replaces the whole view; without this a long step such as
+    // MIDAS opens halfway down.
+    if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+  };
 
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold">{step.question}</h1>
+  return (
+    <div className="mx-auto w-full max-w-2xl space-y-6">
+      <StepProgress stepIndex={stepIndex} onJump={goTo} />
+
+      <div className="space-y-1.5">
+        <h1 className="text-title text-balance">{step.question}</h1>
         {step.id !== "review" ? (
-          <p className="text-muted-foreground text-sm">
+          <p className="text-body-sm text-muted-foreground">
             Every question except the start date is optional.
           </p>
         ) : null}
       </div>
 
-      <div className="min-h-64">
-        <StepBody
-          step={step.id}
-          state={state}
-          patch={patch}
-          onJump={setStepIndex}
-        />
-      </div>
+      <StepBody step={step.id} state={state} patch={patch} onJump={goTo} />
 
       {errors.length > 0 ? (
         <Alert variant="destructive">
@@ -150,81 +153,195 @@ export function LogWizard({
         </Alert>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+      <WizardActions
+        isLastStep={isLastStep}
+        isFirstStep={stepIndex === 0}
+        pending={pending}
+        editing={editingId !== null}
+        onBack={() => goTo(Math.max(0, stepIndex - 1))}
+        onNext={() => goTo(Math.min(STEPS.length - 1, stepIndex + 1))}
+        onSave={save}
+      />
+    </div>
+  );
+}
+
+/**
+ * Back / Next / save.
+ *
+ * Sticky above the tab bar on a phone, so advancing thirteen steps never means
+ * scrolling to the bottom of each one. On desktop it settles into a normal
+ * card at the end of the step. The switch happens at `lg`, matching where the
+ * tab bar itself disappears.
+ */
+function WizardActions({
+  isFirstStep,
+  isLastStep,
+  pending,
+  editing,
+  onBack,
+  onNext,
+  onSave,
+}: {
+  isFirstStep: boolean;
+  isLastStep: boolean;
+  pending: boolean;
+  editing: boolean;
+  onBack: () => void;
+  onNext: () => void;
+  onSave: (status: "draft" | "complete") => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "sticky bottom-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px))] z-30 -mx-4 space-y-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-md",
+        "sm:-mx-6 sm:px-6",
+        "lg:static lg:mx-0 lg:flex lg:items-center lg:gap-3 lg:space-y-0 lg:rounded-xl lg:border lg:bg-card lg:p-4 lg:shadow-card",
+      )}
+    >
+      <div className="flex gap-2 lg:contents">
         <Button
           type="button"
           variant="outline"
-          disabled={stepIndex === 0 || pending}
-          onClick={() => setStepIndex((index) => Math.max(0, index - 1))}
+          disabled={isFirstStep || pending}
+          onClick={onBack}
+          className="lg:order-1"
         >
+          <ArrowLeft aria-hidden />
           Back
         </Button>
 
         {isLastStep ? (
-          <Button type="button" disabled={pending} onClick={() => save("complete")}>
-            {pending ? "Saving…" : editingId ? "Save changes" : "Save episode"}
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={() => onSave("complete")}
+            className="flex-1 lg:order-3 lg:ml-auto lg:flex-none"
+          >
+            {pending ? "Saving…" : editing ? "Save changes" : "Save episode"}
+            {pending ? null : <Check aria-hidden />}
           </Button>
         ) : (
           <Button
             type="button"
             disabled={pending}
-            onClick={() =>
-              setStepIndex((index) => Math.min(STEPS.length - 1, index + 1))
-            }
+            onClick={onNext}
+            className="flex-1 lg:order-3 lg:ml-auto lg:flex-none"
           >
             Next
+            <ArrowRight aria-hidden />
           </Button>
         )}
-
-        <Button
-          type="button"
-          variant="ghost"
-          className="ml-auto"
-          disabled={pending}
-          onClick={() => save("draft")}
-        >
-          Save and finish later
-        </Button>
       </div>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="w-full lg:order-2 lg:w-auto"
+        disabled={pending}
+        onClick={() => onSave("draft")}
+      >
+        Save and finish later
+      </Button>
     </div>
   );
 }
 
+/**
+ * Progress and step jumping.
+ *
+ * The previous control was thirteen 1.5px-tall bars, which on a phone were
+ * roughly 22 x 6px each - visible, but not something a thumb can hit. The bar
+ * here is a plain indicator, and jumping to a step happens in a disclosure of
+ * full-width rows that are comfortably tappable and readable.
+ */
 function StepProgress({
   stepIndex,
   onJump,
-  title,
 }: {
   stepIndex: number;
   onJump: (index: number) => void;
-  title: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const step = STEPS[stepIndex];
+  const percent = ((stepIndex + 1) / STEPS.length) * 100;
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">{title}</span>
-        <span className="text-muted-foreground">
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-body-sm min-w-0 truncate font-medium">{step.title}</p>
+        <p className="text-caption text-muted-foreground shrink-0 tabular-nums">
           Step {stepIndex + 1} of {STEPS.length}
-        </span>
+        </p>
       </div>
-      {/* Each segment is clickable so any answered step can be revisited
-          directly, not only by stepping back one at a time. */}
-      <div className="flex gap-1">
-        {STEPS.map((step, index) => (
-          <button
-            key={step.id}
-            type="button"
-            title={step.title}
-            aria-label={`Go to ${step.title}`}
-            aria-current={index === stepIndex ? "step" : undefined}
-            onClick={() => onJump(index)}
-            className={cn(
-              "h-1.5 flex-1 rounded-full transition-colors",
-              index <= stepIndex ? "bg-primary" : "bg-muted hover:bg-muted-foreground/30",
-            )}
+
+      <div
+        role="progressbar"
+        aria-valuenow={stepIndex + 1}
+        aria-valuemin={1}
+        aria-valuemax={STEPS.length}
+        aria-label="Wizard progress"
+        className="bg-lavender h-1.5 w-full overflow-hidden rounded-full"
+      >
+        <div
+          className="bg-primary h-full rounded-full transition-[width] duration-300"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+
+      <details
+        open={open}
+        onToggle={(event) => setOpen(event.currentTarget.open)}
+        className="border-border bg-card overflow-hidden rounded-lg border"
+      >
+        <summary className="text-body-sm text-muted-foreground hover:text-primary-strong flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 [&::-webkit-details-marker]:hidden">
+          Jump to a step
+          <ChevronDown
+            aria-hidden
+            className={cn("size-4 transition-transform", open && "rotate-180")}
           />
-        ))}
-      </div>
+        </summary>
+        <ul className="border-border divide-border max-h-72 divide-y overflow-y-auto border-t">
+          {STEPS.map((entry, index) => {
+            const done = index < stepIndex;
+            const current = index === stepIndex;
+            return (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  aria-current={current ? "step" : undefined}
+                  onClick={() => {
+                    setOpen(false);
+                    onJump(index);
+                  }}
+                  className={cn(
+                    "text-body-sm flex min-h-11 w-full items-center gap-3 px-3.5 py-2 text-left transition-colors",
+                    current
+                      ? "bg-lavender text-primary-strong font-semibold"
+                      : "hover:bg-lavender/50",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "text-caption flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums",
+                      current
+                        ? "bg-primary text-primary-foreground"
+                        : done
+                          ? "bg-lavender-strong text-primary-strong"
+                          : "bg-surface-sunken text-muted-foreground",
+                    )}
+                  >
+                    {done ? <Check className="size-3.5" /> : index + 1}
+                  </span>
+                  <span className="min-w-0 truncate">{entry.title}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </details>
     </div>
   );
 }
@@ -256,7 +373,7 @@ function StepBody({
             onChange={(headacheType) => patch({ headacheType })}
             placeholder="How would you describe it?"
           />
-          <p className="text-muted-foreground text-xs">
+          <p className="text-caption text-muted-foreground">
             This records how you classify the episode for your own notes. It is
             not a diagnosis.
           </p>
@@ -289,7 +406,7 @@ function StepBody({
             onChange={(possibleTriggers) => patch({ possibleTriggers })}
             placeholder="Something else you noticed"
           />
-          <p className="text-muted-foreground text-xs">
+          <p className="text-caption text-muted-foreground">
             These are things you noticed around the episode. Recording one here
             does not mean it caused the migraine.
           </p>
@@ -317,16 +434,20 @@ function StepBody({
       );
     case "notes":
       return (
-        <div className="space-y-2">
-          <Label htmlFor="notes">Anything else worth remembering</Label>
+        <Field
+          label="Anything else worth remembering"
+          htmlFor="notes"
+          hint="Only you will read this."
+        >
           <Textarea
             id="notes"
             rows={8}
             value={state.notes}
+            aria-describedby="notes-hint"
             placeholder="What you were doing beforehand, how you felt, anything unusual…"
             onChange={(event) => patch({ notes: event.target.value })}
           />
-        </div>
+        </Field>
       );
     case "review":
       return <ReviewStep state={state} onJump={onJump} />;
@@ -342,19 +463,17 @@ function TimingStep({
 }) {
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="start-date">Date</Label>
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Date" htmlFor="start-date">
             <Input
               id="start-date"
               type="date"
               value={state.startDate}
               onChange={(event) => patch({ startDate: event.target.value })}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="start-time">Time</Label>
+          </Field>
+          <Field label="Time" htmlFor="start-time">
             <Input
               id="start-time"
               type="time"
@@ -362,52 +481,49 @@ function TimingStep({
               disabled={state.startPrecision === "unknown"}
               onChange={(event) => patch({ startTime: event.target.value })}
             />
-          </div>
+          </Field>
         </div>
 
-        <PrecisionPicker
-          value={state.startPrecision}
-          onChange={(startPrecision) => patch({ startPrecision })}
-        />
+        <FieldGroup label="How sure are you of the time?">
+          <PrecisionPicker
+            value={state.startPrecision}
+            onChange={(startPrecision) => patch({ startPrecision })}
+          />
+        </FieldGroup>
       </div>
 
-      <div className="space-y-3 border-t pt-4">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-4"
-            checked={state.knowsEnd}
-            onChange={(event) =>
-              patch({
-                knowsEnd: event.target.checked,
-                // Recording an end means the duration is measurable; clearing
-                // it must not leave a "calculated" duration with nothing to
-                // calculate from.
-                durationKind: event.target.checked
-                  ? "calculated"
-                  : state.durationKind === "calculated"
-                    ? "unknown"
-                    : state.durationKind,
-              })
-            }
-          />
-          I know when it ended
-        </label>
+      <div className="border-border space-y-4 border-t pt-5">
+        <CheckboxField
+          label="I know when it ended"
+          className="-ml-2"
+          checked={state.knowsEnd}
+          onChange={(event) =>
+            patch({
+              knowsEnd: event.target.checked,
+              // Recording an end means the duration is measurable; clearing it
+              // must not leave a "calculated" duration with nothing to
+              // calculate from.
+              durationKind: event.target.checked
+                ? "calculated"
+                : state.durationKind === "calculated"
+                  ? "unknown"
+                  : state.durationKind,
+            })
+          }
+        />
 
         {state.knowsEnd ? (
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="end-date">End date</Label>
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="End date" htmlFor="end-date">
                 <Input
                   id="end-date"
                   type="date"
                   value={state.endDate}
                   onChange={(event) => patch({ endDate: event.target.value })}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="end-time">End time</Label>
+              </Field>
+              <Field label="End time" htmlFor="end-time">
                 <Input
                   id="end-time"
                   type="time"
@@ -415,12 +531,14 @@ function TimingStep({
                   disabled={state.endPrecision === "unknown"}
                   onChange={(event) => patch({ endTime: event.target.value })}
                 />
-              </div>
+              </Field>
             </div>
-            <PrecisionPicker
-              value={state.endPrecision}
-              onChange={(endPrecision) => patch({ endPrecision })}
-            />
+            <FieldGroup label="How sure are you of the end time?">
+              <PrecisionPicker
+                value={state.endPrecision}
+                onChange={(endPrecision) => patch({ endPrecision })}
+              />
+            </FieldGroup>
           </div>
         ) : null}
       </div>
@@ -436,24 +554,16 @@ function PrecisionPicker({
   onChange: (next: TimePrecision) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <ChipGroup>
       {TIME_PRECISIONS.map((precision) => (
-        <button
+        <Chip
           key={precision}
-          type="button"
-          aria-pressed={value === precision}
+          label={TIME_PRECISION_LABELS[precision]}
+          selected={value === precision}
           onClick={() => onChange(precision)}
-          className={cn(
-            "rounded-full border px-3 py-1 text-sm transition-colors",
-            value === precision
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-input hover:bg-muted",
-          )}
-        >
-          {TIME_PRECISION_LABELS[precision]}
-        </button>
+        />
       ))}
-    </div>
+    </ChipGroup>
   );
 }
 
@@ -466,8 +576,11 @@ function SleepStep({
 }) {
   return (
     <div className="space-y-6">
-      <div className="space-y-1.5">
-        <Label htmlFor="sleep-hours">Hours slept</Label>
+      <Field
+        label="Hours slept"
+        htmlFor="sleep-hours"
+        hint="The night before the episode. Half hours are fine."
+      >
         <Input
           id="sleep-hours"
           type="number"
@@ -477,22 +590,19 @@ function SleepStep({
           step={0.5}
           value={state.sleepHours}
           placeholder="e.g. 6.5"
+          aria-describedby="sleep-hours-hint"
           onChange={(event) => patch({ sleepHours: event.target.value })}
           className="w-32"
         />
-        <p className="text-muted-foreground text-xs">
-          The night before the episode. Half hours are fine.
-        </p>
-      </div>
+      </Field>
 
-      <div className="space-y-2">
-        <Label>Sleep quality</Label>
-        <div className="flex flex-wrap gap-2">
+      <FieldGroup label="Sleep quality">
+        <ChipGroup>
           {SLEEP_QUALITY_LEVELS.map((quality) => (
-            <button
+            <Chip
               key={quality}
-              type="button"
-              aria-pressed={state.sleepQuality === quality}
+              label={SLEEP_QUALITY_LABELS[quality]}
+              selected={state.sleepQuality === quality}
               // Pressing the active choice clears it, so a mis-tap can be taken
               // back without needing a separate "not recorded" option.
               onClick={() =>
@@ -501,18 +611,10 @@ function SleepStep({
                     state.sleepQuality === quality ? null : (quality as SleepQuality),
                 })
               }
-              className={cn(
-                "rounded-full border px-3 py-1.5 text-sm transition-colors",
-                state.sleepQuality === quality
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-input hover:bg-muted",
-              )}
-            >
-              {SLEEP_QUALITY_LABELS[quality]}
-            </button>
+            />
           ))}
-        </div>
-      </div>
+        </ChipGroup>
+      </FieldGroup>
     </div>
   );
 }
@@ -537,11 +639,9 @@ function DurationStep({
   return (
     <div className="space-y-5">
       {calculated !== null ? (
-        <div className="rounded-lg border p-4">
-          <p className="text-muted-foreground text-xs font-medium uppercase">
-            Calculated from the times you entered
-          </p>
-          <p className="mt-1 text-lg font-semibold">
+        <div className="border-lavender-deep/50 from-lavender/70 to-card rounded-xl border bg-gradient-to-br p-4">
+          <p className="eyebrow">Calculated from the times you entered</p>
+          <p className="text-title text-primary-strong mt-1">
             {formatDuration(calculated) ?? "Unknown"}
           </p>
           {state.durationKind !== "calculated" ? (
@@ -555,25 +655,26 @@ function DurationStep({
               Use this duration
             </Button>
           ) : (
-            <p className="text-muted-foreground mt-2 text-xs">
+            <p className="text-caption text-muted-foreground mt-2 flex items-center gap-1.5">
+              <Check className="size-3.5" aria-hidden />
               Using this. Pick an option below to override it.
             </p>
           )}
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <ChipGroup>
         {DURATION_BANDS.map((band) => (
-          <DurationChoice
+          <Chip
             key={band.id}
             label={band.label}
-            active={state.durationKind === "band" && state.durationBand === band.id}
+            selected={state.durationKind === "band" && state.durationBand === band.id}
             onClick={() => patch({ durationKind: "band", durationBand: band.id })}
           />
         ))}
-        <DurationChoice
+        <Chip
           label="Still ongoing"
-          active={state.durationKind === "ongoing"}
+          selected={state.durationKind === "ongoing"}
           onClick={() =>
             patch({
               durationKind: "ongoing",
@@ -584,46 +685,44 @@ function DurationStep({
             })
           }
         />
-        <DurationChoice
+        <Chip
           label="Custom duration"
-          active={state.durationKind === "custom"}
+          selected={state.durationKind === "custom"}
           onClick={() => patch({ durationKind: "custom" })}
         />
-        <DurationChoice
+        <Chip
           label="Unknown"
-          active={state.durationKind === "unknown"}
+          selected={state.durationKind === "unknown"}
           onClick={() => patch({ durationKind: "unknown" })}
         />
-      </div>
+      </ChipGroup>
 
       {state.durationKind === "custom" ? (
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="custom-hours">Hours</Label>
-            <Input
-              id="custom-hours"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              value={state.customHours}
-              onChange={(event) => patch({ customHours: event.target.value })}
-              className="w-24"
-            />
+        <div className="border-border bg-card space-y-3 rounded-xl border p-4 shadow-card">
+          <div className="flex items-end gap-3">
+            <Field label="Hours" htmlFor="custom-hours" className="flex-1">
+              <Input
+                id="custom-hours"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={state.customHours}
+                onChange={(event) => patch({ customHours: event.target.value })}
+              />
+            </Field>
+            <Field label="Minutes" htmlFor="custom-minutes" className="flex-1">
+              <Input
+                id="custom-minutes"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={59}
+                value={state.customMinutes}
+                onChange={(event) => patch({ customMinutes: event.target.value })}
+              />
+            </Field>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="custom-minutes">Minutes</Label>
-            <Input
-              id="custom-minutes"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={59}
-              value={state.customMinutes}
-              onChange={(event) => patch({ customMinutes: event.target.value })}
-              className="w-24"
-            />
-          </div>
-          <p className="text-muted-foreground pb-2 text-sm">
+          <p className="text-body-sm text-muted-foreground">
             {formatDuration(customToMinutes(state)) ?? "Enter a duration"}
           </p>
         </div>
@@ -632,32 +731,20 @@ function DurationStep({
   );
 }
 
-function DurationChoice({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-sm transition-colors",
-        active
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-input hover:bg-muted",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
+const SEVERITY_VALUES = Array.from(
+  { length: MAX_SEVERITY - MIN_SEVERITY + 1 },
+  (_, index) => MIN_SEVERITY + index,
+);
 
+/**
+ * Severity 1-10.
+ *
+ * A ten-value discrete choice, so it is ten buttons rather than a range slider:
+ * a slider on a phone means dragging a 20px thumb to hit one of ten positions,
+ * and it exposes nothing useful to a screen reader beyond the number. Each cell
+ * carries its band colour when chosen, matching the calendar, and the number is
+ * always printed so the colour is never the only encoding.
+ */
 function SeverityStep({
   state,
   patch,
@@ -665,37 +752,75 @@ function SeverityStep({
   state: WizardState;
   patch: (changes: Partial<WizardState>) => void;
 }) {
-  const value = state.severity ?? 5;
+  const band = severityBand(state.severity);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-baseline gap-3">
-        <span className="text-4xl font-semibold tabular-nums">
+      <div className="flex items-center gap-4">
+        <span
+          aria-hidden
+          className="text-title flex size-16 shrink-0 items-center justify-center rounded-2xl tabular-nums transition-colors"
+          style={{ backgroundColor: band.background, color: band.foreground }}
+        >
           {state.severity ?? "—"}
         </span>
-        <span className="text-muted-foreground text-sm">
-          {state.severity === null
-            ? "Not recorded"
-            : `${SEVERITY_LABELS[state.severity]} · ${state.severity} of 10`}
-        </span>
-      </div>
-
-      <div className="space-y-2">
-        <input
-          type="range"
-          min={1}
-          max={10}
-          step={1}
-          value={value}
-          aria-label="Pain severity from 1 to 10"
-          onChange={(event) => patch({ severity: Number(event.target.value) })}
-          className="accent-primary w-full"
-        />
-        <div className="text-muted-foreground flex justify-between text-xs">
-          <span>1 · {SEVERITY_ANCHOR_LOW}</span>
-          <span>10 · {SEVERITY_ANCHOR_HIGH}</span>
+        <div className="min-w-0">
+          <p className="text-subheading">
+            {state.severity === null
+              ? "Not recorded"
+              : SEVERITY_LABELS[state.severity]}
+          </p>
+          {state.severity !== null ? (
+            <p className="text-body-sm text-muted-foreground">
+              {state.severity} of {MAX_SEVERITY}
+            </p>
+          ) : null}
         </div>
       </div>
+
+      <FieldGroup label="Pick a level">
+        <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+          {SEVERITY_VALUES.map((value) => {
+            const selected = state.severity === value;
+            const valueBand = severityBand(value);
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={selected}
+                aria-label={`Severity ${value} of ${MAX_SEVERITY}, ${SEVERITY_LABELS[value]}`}
+                // Tapping the chosen level again clears it, matching every other
+                // single-choice control in the wizard.
+                onClick={() => patch({ severity: selected ? null : value })}
+                className={cn(
+                  "text-subheading flex h-12 items-center justify-center rounded-lg border tabular-nums transition-all active:translate-y-px",
+                  selected
+                    ? "border-primary-strong shadow-raised"
+                    : "border-border bg-card hover:border-lavender-deep hover:bg-lavender/50",
+                )}
+                style={
+                  selected
+                    ? {
+                        backgroundColor: valueBand.background,
+                        color: valueBand.foreground,
+                      }
+                    : undefined
+                }
+              >
+                {value}
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-caption text-muted-foreground flex justify-between">
+          <span>
+            {MIN_SEVERITY} · {SEVERITY_ANCHOR_LOW}
+          </span>
+          <span>
+            {MAX_SEVERITY} · {SEVERITY_ANCHOR_HIGH}
+          </span>
+        </div>
+      </FieldGroup>
 
       {state.severity !== null ? (
         <Button
@@ -704,18 +829,9 @@ function SeverityStep({
           size="sm"
           onClick={() => patch({ severity: null })}
         >
-          Clear
+          Clear severity
         </Button>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => patch({ severity: 5 })}
-        >
-          Record a severity
-        </Button>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -732,16 +848,8 @@ function ReviewStep({
     : scoreMidas(toMidasAnswers(state.midas));
 
   const rows: { step: StepId; label: string; value: React.ReactNode }[] = [
-    {
-      step: "timing",
-      label: "Started",
-      value: describeStart(state),
-    },
-    {
-      step: "duration",
-      label: "Duration",
-      value: describeDuration(state),
-    },
+    { step: "timing", label: "Started", value: describeStart(state) },
+    { step: "duration", label: "Duration", value: describeDuration(state) },
     {
       step: "severity",
       label: "Severity",
@@ -760,31 +868,15 @@ function ReviewStep({
       label: "Pain locations",
       value: <ValueChips values={state.painLocations} />,
     },
-    {
-      step: "symptoms",
-      label: "Symptoms",
-      value: <ValueChips values={state.symptoms} />,
-    },
+    { step: "symptoms", label: "Symptoms", value: <ValueChips values={state.symptoms} /> },
     {
       step: "triggers",
       label: "Possible triggers",
       value: <ValueChips values={state.possibleTriggers} />,
     },
-    {
-      step: "sleep",
-      label: "Sleep",
-      value: describeSleep(state),
-    },
-    {
-      step: "medications",
-      label: "Medication",
-      value: describeMedications(state),
-    },
-    {
-      step: "relief",
-      label: "Relief methods",
-      value: describeRelief(state),
-    },
+    { step: "sleep", label: "Sleep", value: describeSleep(state) },
+    { step: "medications", label: "Medication", value: describeMedications(state) },
+    { step: "relief", label: "Relief methods", value: describeRelief(state) },
     {
       step: "notes",
       label: "Notes",
@@ -794,23 +886,29 @@ function ReviewStep({
 
   return (
     <div className="space-y-4">
-      <dl className="divide-y">
+      <dl className="border-border bg-card divide-border divide-y rounded-xl border shadow-card">
         {rows.map((row) => (
           <div
             key={row.label}
-            className="flex flex-wrap items-start gap-x-4 gap-y-1 py-3"
+            className="flex items-start gap-3 p-4 sm:grid sm:grid-cols-[10rem_1fr_auto] sm:items-baseline sm:gap-4"
           >
-            <dt className="text-muted-foreground w-36 shrink-0 text-sm">
-              {row.label}
-            </dt>
-            <dd className="min-w-0 flex-1 text-sm">{row.value}</dd>
+            <div className="min-w-0 flex-1 space-y-1 sm:contents">
+              <dt className="eyebrow sm:text-body-sm sm:text-muted-foreground sm:normal-case sm:tracking-normal">
+                {row.label}
+              </dt>
+              <dd className="text-body-sm min-w-0 break-words whitespace-pre-wrap">
+                {row.value}
+              </dd>
+            </div>
             <Button
               type="button"
               variant="ghost"
-              size="xs"
+              size="icon-sm"
+              aria-label={`Edit ${row.label.toLowerCase()}`}
+              className="-mt-1 shrink-0 sm:mt-0"
               onClick={() => onJump(STEPS.findIndex((step) => step.id === row.step))}
             >
-              Edit
+              <Pencil aria-hidden />
             </Button>
           </div>
         ))}
@@ -818,14 +916,15 @@ function ReviewStep({
 
       {midasResult ? (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-muted-foreground text-sm">Activity impact</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="eyebrow">Activity impact</p>
             <Button
               type="button"
               variant="ghost"
-              size="xs"
+              size="sm"
               onClick={() => onJump(STEPS.findIndex((step) => step.id === "midas"))}
             >
+              <Pencil aria-hidden />
               Edit
             </Button>
           </div>

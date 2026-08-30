@@ -1,4 +1,13 @@
+import { ChevronDown } from "lucide-react";
+
 import { severityBand } from "@/lib/migraines/severity-scale";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 /**
  * Charts built from plain elements rather than a charting library.
@@ -9,8 +18,8 @@ import { severityBand } from "@/lib/migraines/severity-scale";
  * always reachable without relying on colour or on pointer hover.
  */
 
-/** Categorical slot 1, 4.30:1 against the page surface. */
-const BAR_COLOR = "#2a78d6";
+/** The theme's indigo, 4.9:1 against the page background. */
+const BAR_COLOR = "var(--chart-1)";
 
 export function ChartCard({
   title,
@@ -22,15 +31,13 @@ export function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-3 rounded-lg border p-4">
-      <div>
-        <h2 className="text-sm font-medium">{title}</h2>
-        {description ? (
-          <p className="text-muted-foreground text-xs">{description}</p>
-        ) : null}
-      </div>
-      {children}
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle as="h2">{title}</CardTitle>
+        {description ? <CardDescription>{description}</CardDescription> : null}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 
@@ -72,7 +79,7 @@ export function ColumnChart({
   const max = Math.max(...data.map((datum) => datum.value), 0);
 
   if (max === 0) {
-    return <p className="text-muted-foreground text-sm">{emptyMessage}</p>;
+    return <ChartEmpty>{emptyMessage}</ChartEmpty>;
   }
 
   // Only a single, unambiguous peak earns a direct label.
@@ -83,7 +90,9 @@ export function ColumnChart({
 
   return (
     <div className="space-y-3">
-      <div className="flex h-36 items-end gap-1">
+      {/* The baseline is drawn as a border on the plot area so bars sit on a
+          line rather than floating, which matters once several months are 0. */}
+      <div className="border-border flex h-36 items-end gap-1 border-b sm:h-40">
         {data.map((datum) => {
           const isPeak = datum.key === peakKey;
           return (
@@ -93,16 +102,16 @@ export function ColumnChart({
               title={datum.title}
             >
               {isPeak ? (
-                <span className="text-[10px] leading-none font-medium tabular-nums">
+                <span className="text-primary-strong text-[10px] leading-none font-semibold tabular-nums">
                   {formatValue(datum.value)}
                   {valueSuffix}
                 </span>
               ) : null}
               <div
-                className="w-full rounded-t-[4px]"
+                className="w-full rounded-t-[3px] transition-opacity hover:opacity-85"
                 style={{
                   height: `${(datum.value / max) * 100}%`,
-                  minHeight: datum.value > 0 ? 2 : 0,
+                  minHeight: datum.value > 0 ? 3 : 0,
                   backgroundColor: datum.color ?? BAR_COLOR,
                 }}
               />
@@ -158,21 +167,21 @@ export function FrequencyBars({
   const max = Math.max(...data.map((datum) => datum.value), 0);
 
   if (data.length === 0 || max === 0) {
-    return <p className="text-muted-foreground text-sm">{emptyMessage}</p>;
+    return <ChartEmpty>{emptyMessage}</ChartEmpty>;
   }
 
   return (
     <div className="space-y-3">
-      <ul className="space-y-2">
+      <ul className="space-y-2.5">
         {data.map((datum) => (
-          <li key={datum.key} className="space-y-1" title={datum.detail}>
-            <div className="flex items-baseline justify-between gap-3 text-sm">
+          <li key={datum.key} className="space-y-1.5" title={datum.detail}>
+            <div className="text-body-sm flex items-baseline justify-between gap-3">
               <span className="min-w-0 truncate">{datum.label}</span>
               <span className="text-muted-foreground shrink-0 tabular-nums">
                 {datum.value}
               </span>
             </div>
-            <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+            <div className="bg-lavender h-2 w-full overflow-hidden rounded-full">
               <div
                 className="h-full rounded-full"
                 style={{
@@ -206,11 +215,7 @@ export function SeverityDistribution({
   total: number;
 }) {
   if (total === 0) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        No severity has been recorded yet.
-      </p>
-    );
+    return <ChartEmpty>No severity has been recorded yet.</ChartEmpty>;
   }
 
   return (
@@ -230,6 +235,15 @@ export function SeverityDistribution({
   );
 }
 
+/** A chart with nothing to draw should still look composed, not blank. */
+function ChartEmpty({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border-border bg-surface-sunken/60 text-body-sm text-muted-foreground flex min-h-24 items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center text-balance">
+      {children}
+    </div>
+  );
+}
+
 /** Always available, so no figure depends on hovering or on seeing colour. */
 function DataTable({
   heading,
@@ -239,23 +253,29 @@ function DataTable({
   rows: { key: string; label: string; value: string }[];
 }) {
   return (
-    <details className="text-xs">
-      <summary className="text-muted-foreground cursor-pointer">
+    <details className="group/table border-border border-t pt-2">
+      <summary className="text-caption text-muted-foreground hover:text-primary-strong flex min-h-11 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+        <ChevronDown
+          aria-hidden
+          className="size-3.5 transition-transform group-open/table:rotate-180"
+        />
         Show the numbers
       </summary>
-      <table className="mt-2 w-full">
-        <caption className="sr-only">{heading}</caption>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key} className="border-b last:border-0">
-              <th scope="row" className="py-1 text-left font-normal">
-                {row.label}
-              </th>
-              <td className="py-1 text-right tabular-nums">{row.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="scroll-x mt-2">
+        <table className="text-caption w-full">
+          <caption className="sr-only">{heading}</caption>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key} className="border-border border-b last:border-0">
+                <th scope="row" className="py-1.5 text-left font-normal">
+                  {row.label}
+                </th>
+                <td className="py-1.5 text-right tabular-nums">{row.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </details>
   );
 }

@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Plus } from "lucide-react";
+
 import { type CatalogItem, isCustomValue, labelFor } from "@/lib/migraines/catalog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Chip, ChipGroup } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 /**
  * Predefined options plus "Other".
@@ -13,6 +15,10 @@ import { cn } from "@/lib/utils";
  * Selected values are plain strings, so a typed answer sits in the same array
  * as a catalogue id and needs no special handling anywhere downstream. Custom
  * entries are shown as removable chips after the predefined ones.
+ *
+ * The chip itself is the shared `Chip` control, so these answer sets, the
+ * duration bands, the sleep-quality picker and the did-it-help toggles all look
+ * and behave the same.
  */
 
 type MultiProps = {
@@ -42,13 +48,13 @@ export function OptionChips({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
+    <div className="space-y-4">
+      <ChipGroup>
         {options.map((option) => (
           <Chip
             key={option.id}
             label={option.label}
-            active={selected.includes(option.id)}
+            selected={selected.includes(option.id)}
             onClick={() => toggle(option.id)}
           />
         ))}
@@ -56,12 +62,12 @@ export function OptionChips({
           <Chip
             key={value}
             label={value}
-            active
+            selected
             onClick={() => toggle(value)}
             removable
           />
         ))}
-      </div>
+      </ChipGroup>
 
       <CustomEntry
         label={otherLabel}
@@ -93,27 +99,22 @@ export function SingleOptionChips({
   const customSelected = selected !== null && !known.has(selected);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
+    <div className="space-y-4">
+      <ChipGroup>
         {options.map((option) => (
           <Chip
             key={option.id}
             label={option.label}
-            active={selected === option.id}
+            selected={selected === option.id}
             // Clicking the active choice clears it, so an answer given by
             // mistake can be taken back without a separate "none" option.
             onClick={() => onChange(selected === option.id ? null : option.id)}
           />
         ))}
         {customSelected ? (
-          <Chip
-            label={selected}
-            active
-            onClick={() => onChange(null)}
-            removable
-          />
+          <Chip label={selected} selected onClick={() => onChange(null)} removable />
         ) : null}
-      </div>
+      </ChipGroup>
 
       <CustomEntry
         label={otherLabel}
@@ -124,36 +125,14 @@ export function SingleOptionChips({
   );
 }
 
-function Chip({
-  label,
-  active,
-  onClick,
-  removable = false,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  removable?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
-        active
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-input hover:bg-muted",
-      )}
-    >
-      {label}
-      {removable ? <X className="size-3.5 opacity-70" aria-hidden /> : null}
-    </button>
-  );
-}
-
-function CustomEntry({
+/**
+ * The "add your own" affordance, shared by both chip sets.
+ *
+ * On a phone the open state stacks the field above its buttons rather than
+ * competing for one row, which is what previously pushed the Cancel button off
+ * the edge at 320px.
+ */
+export function CustomEntry({
   label,
   placeholder,
   onAdd,
@@ -173,20 +152,27 @@ function CustomEntry({
     setOpen(false);
   };
 
+  const close = () => {
+    setValue("");
+    setOpen(false);
+  };
+
   if (!open) {
     return (
       <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-        + {label}
+        <Plus aria-hidden />
+        {label}
       </Button>
     );
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="border-border bg-surface-sunken/60 space-y-2 rounded-lg border p-3 sm:flex sm:items-center sm:gap-2 sm:space-y-0">
       <Input
         autoFocus
         value={value}
         placeholder={placeholder}
+        aria-label={placeholder}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
           // The chips live inside the wizard's form; Enter must add the answer
@@ -195,27 +181,24 @@ function CustomEntry({
             event.preventDefault();
             commit();
           }
-          if (event.key === "Escape") {
-            setValue("");
-            setOpen(false);
-          }
+          if (event.key === "Escape") close();
         }}
-        className="max-w-xs"
+        className="sm:max-w-xs"
       />
-      <Button type="button" size="sm" onClick={commit}>
-        Add
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onClick={() => {
-          setValue("");
-          setOpen(false);
-        }}
-      >
-        Cancel
-      </Button>
+      <div className="flex gap-2">
+        <Button type="button" size="sm" className="flex-1 sm:flex-none" onClick={commit}>
+          Add
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="flex-1 sm:flex-none"
+          onClick={close}
+        >
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }
@@ -223,21 +206,15 @@ function CustomEntry({
 /** Read-only chip list, for the review step and episode details. */
 export function ValueChips({ values }: { values: string[] }) {
   if (values.length === 0) {
-    return <span className="text-muted-foreground text-sm">Not recorded</span>;
+    return <span className="text-body-sm text-muted-foreground">Not recorded</span>;
   }
 
   return (
     <div className="flex flex-wrap gap-1.5">
       {values.map((value) => (
-        <span
-          key={value}
-          className={cn(
-            "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs",
-            isCustomValue(value) ? "border-dashed" : "border-input",
-          )}
-        >
+        <Badge key={value} variant={isCustomValue(value) ? "custom" : "lavender"}>
           {labelFor(value)}
-        </span>
+        </Badge>
       ))}
     </div>
   );

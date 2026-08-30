@@ -1,44 +1,75 @@
 import Link from "next/link";
+import { LogOut } from "lucide-react";
+
+import { CalmMark } from "@/components/layout/calm-mark";
+import { DesktopNav } from "@/components/layout/desktop-nav";
 import { logout } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 
-const NAV_LINKS = [
-  { href: "/", label: "Dashboard" },
-  { href: "/calendar", label: "Calendar" },
-  { href: "/history", label: "History" },
-  { href: "/insights", label: "Insights" },
-  { href: "/log", label: "Log episode" },
-] as const;
-
+/**
+ * The top bar.
+ *
+ * On a phone and a tablet it carries identity and the account action only -
+ * the sections themselves live in the bottom tab bar, within thumb reach. From
+ * `lg` up the
+ * navigation moves in here and the bar becomes the single place to orient
+ * yourself.
+ *
+ * It is sticky rather than static so the way out of a long history or a long
+ * wizard is always one tap away.
+ */
 export function AppHeader({ username }: { username: string }) {
   return (
-    <header className="border-b">
-      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-4 px-6 py-3">
-        <Link href="/" className="font-semibold">
-          My Calm Head
+    <header className="border-border bg-card/90 sticky top-0 z-40 border-b backdrop-blur-md">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-4 sm:px-6 lg:h-16">
+        <Link
+          href="/"
+          className="flex min-h-11 min-w-0 shrink-0 items-center gap-2.5 rounded-lg"
+        >
+          <span
+            aria-hidden
+            className="from-lavender-strong to-lavender-deep text-primary-strong flex size-9 shrink-0 items-center justify-center rounded-[0.7rem] bg-gradient-to-br"
+          >
+            <CalmMark />
+          </span>
+          <span className="text-subheading text-foreground truncate">
+            My Calm Head
+          </span>
         </Link>
 
-        <nav className="flex items-center gap-4 text-sm">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="ml-auto flex items-center gap-2 lg:gap-4">
+          <DesktopNav />
 
-        <div className="ml-auto flex items-center gap-3 text-sm">
-          <span className="text-muted-foreground">{username}</span>
-          <form action={logout}>
-            <Button type="submit" variant="outline" size="sm">
-              Sign out
-            </Button>
-          </form>
+          <div className="border-border flex items-center gap-2 lg:border-l lg:pl-4">
+            <span className="text-body-sm text-muted-foreground hidden max-w-32 truncate sm:inline">
+              {username}
+            </span>
+            <form action={logout}>
+              {/* Icon-only on a phone, where the label would crowd the bar; the
+                  accessible name is carried by the icon button either way. */}
+              <Button
+                type="submit"
+                variant="ghost"
+                size="icon"
+                aria-label="Sign out"
+                className="lg:hidden"
+              >
+                <LogOut aria-hidden />
+              </Button>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="hidden lg:inline-flex"
+              >
+                <LogOut aria-hidden />
+                Sign out
+              </Button>
+            </form>
+          </div>
         </div>
       </div>
     </header>
   );
 }
+

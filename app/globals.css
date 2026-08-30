@@ -4,127 +4,344 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------------
+   Design tokens
+   ---------------------------------------------------------------------------
+   Two layers on purpose:
+
+   `:root` holds the palette in product language (background, surface, lavender,
+   danger). The shadcn/base-ui primitives are then pointed at those names, so the
+   whole component library inherits the theme without every component being
+   edited, and a palette change happens in one place.
+
+   Colours are plain hex rather than oklch because the identity is specified in
+   hex; Tailwind opacity modifiers and `color-mix` work the same either way.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* Surfaces */
+  --background: #f8f7fc;
+  --surface: #ffffff;
+  --surface-sunken: #f2f0fa;
+
+  /* Muted indigo. `-strong` is the darker step used wherever the indigo has to
+     carry text: links, secondary-button labels, active navigation. It clears
+     4.5:1 on both the page background and the lavender fills, which the base
+     step does not. */
+  --primary: #6366a8;
+  --primary-strong: #4e5190;
+  --primary-soft: #eeecf9;
+
+  /* Lavender */
+  --lavender: #e9e5f7;
+  --lavender-strong: #dcd6f7;
+  --lavender-deep: #b8afe5;
+
+  /* Text. `--text-muted` is the specified soft grey; at 3.1:1 it is reserved
+     for decorative and large text, never body copy - anything a reader has to
+     read uses `--text-secondary`, which passes AA. */
+  --text: #25263a;
+  --text-secondary: #66677a;
+  --text-muted: #8b8c9d;
+
+  --border: #e8e7ef;
+  --border-strong: #dddbe9;
+
+  /* Muted red. The specified `--danger` is 3.6:1 on white, which is fine for
+     fills, borders and indicators but not for text, so `-strong` is the step
+     used for error copy and for solid destructive buttons. */
+  --danger: #c96b73;
+  --danger-strong: #9e4b54;
+  --danger-soft: #fbf1f2;
+
+  --success: #4f8a71;
+  --success-soft: #eef6f2;
+
+  /* --- shadcn / base-ui primitives, mapped onto the palette above --------- */
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary-foreground: #ffffff;
+  --secondary: var(--lavender);
+  --secondary-foreground: var(--primary-strong);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--lavender);
+  --accent-foreground: var(--primary-strong);
+  --destructive: var(--danger-strong);
+  --destructive-foreground: #ffffff;
+  --input: var(--border);
+  --ring: var(--primary);
+
+  --chart-1: #6366a8;
+  --chart-2: #948dd6;
+  --chart-3: #b8afe5;
+  --chart-4: #4e5190;
+  --chart-5: #312d5e;
+
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--lavender);
+  --sidebar-accent-foreground: var(--primary-strong);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+
+  --radius: 0.75rem;
+
+  /* Soft, low-spread elevation, tinted with the ink colour rather than black so
+     shadows read as part of the lavender ground instead of grey haze. */
+  --shadow-card: 0 1px 2px rgb(37 38 58 / 0.04), 0 1px 3px rgb(37 38 58 / 0.03);
+  --shadow-raised: 0 2px 4px rgb(37 38 58 / 0.04), 0 6px 16px rgb(37 38 58 / 0.06);
+  --shadow-pop: 0 8px 32px rgb(37 38 58 / 0.12);
+
+  /* Height of the mobile tab bar, so page padding reserves room for it in
+     exactly one place. */
+  --bottom-nav-height: 4rem;
+}
+
+/* The app ships light-only; this keeps the primitives coherent if a dark class
+   is ever applied, rather than leaving them on the stock neutral scale. */
+.dark {
+  --background: #191a26;
+  --surface: #212232;
+  --surface-sunken: #1d1e2c;
+  --primary: #a7a4e0;
+  --primary-strong: #c4c1ee;
+  --primary-soft: #2a2b40;
+  --lavender: #2c2d44;
+  --lavender-strong: #363752;
+  --lavender-deep: #4b4c6e;
+  --text: #f0eff7;
+  --text-secondary: #adaec2;
+  --text-muted: #8b8c9d;
+  --border: #2f3045;
+  --border-strong: #3b3c54;
+  --danger: #d98a91;
+  --danger-strong: #e5a4a9;
+  --danger-soft: #34252a;
+  --success: #7fb69c;
+  --success-soft: #22302b;
+  --primary-foreground: #191a26;
+  --destructive-foreground: #191a26;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-raised: 0 2px 4px rgb(0 0 0 / 0.3), 0 6px 16px rgb(0 0 0 / 0.35);
+  --shadow-pop: 0 8px 32px rgb(0 0 0 / 0.45);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-soft: var(--primary-soft);
+
+  --color-lavender: var(--lavender);
+  --color-lavender-strong: var(--lavender-strong);
+  --color-lavender-deep: var(--lavender-deep);
+
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-danger: var(--danger);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
+  --radius-xl: calc(var(--radius) * 1.33);
+  --radius-2xl: calc(var(--radius) * 1.66);
+  --radius-3xl: calc(var(--radius) * 2);
+  --radius-4xl: calc(var(--radius) * 2.4);
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  --shadow-card: var(--shadow-card);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-pop: var(--shadow-pop);
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Type scale. Sized for a phone first; only the two largest steps grow on
+     wider viewports, rather than the whole scale being multiplied. */
+  --text-display: clamp(1.5rem, 1.28rem + 1.1vw, 1.875rem);
+  --text-display--line-height: 1.15;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 650;
+
+  --text-title: clamp(1.25rem, 1.16rem + 0.45vw, 1.5rem);
+  --text-title--line-height: 1.25;
+  --text-title--letter-spacing: -0.015em;
+  --text-title--font-weight: 600;
+
+  --text-heading: 1.0625rem;
+  --text-heading--line-height: 1.35;
+  --text-heading--letter-spacing: -0.01em;
+  --text-heading--font-weight: 600;
+
+  --text-subheading: 0.9375rem;
+  --text-subheading--line-height: 1.4;
+  --text-subheading--font-weight: 600;
+
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.55;
+
+  --text-body-sm: 0.8125rem;
+  --text-body-sm--line-height: 1.5;
+
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.45;
+
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1.3;
+  --text-label--letter-spacing: 0.06em;
+  --text-label--font-weight: 600;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+
   html {
     @apply font-sans;
+    /* `clip` rather than `hidden`: it contains a stray wide child without
+       turning the root into a scroll container, so `position: sticky` keeps
+       working. A safety net - overflows are still fixed at the source. */
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground text-body;
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One focus treatment for everything, so a keyboard user sees the same
+     indicator on a link, a chip and a native checkbox. The offset places it
+     outside the control, which is what keeps it visible on a filled indigo
+     button. The outline follows each element's own radius, so nothing here
+     touches `border-radius`. */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--lavender-strong);
+    color: var(--text);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"] {
+    accent-color: var(--primary);
+  }
+
+  /* Date and time inputs render a UA icon that is near-invisible against the
+     lavender ground; tinting it keeps the affordance readable. */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
+    cursor: pointer;
+  }
+  input[type="date"]:hover::-webkit-calendar-picker-indicator,
+  input[type="time"]:hover::-webkit-calendar-picker-indicator {
+    opacity: 0.9;
+  }
+}
+
+@layer components {
+  /* The small uppercase caption above stat figures, episode sections and
+     insight groups. It was repeated as four utilities in a dozen places. */
+  .eyebrow {
+    @apply text-label text-muted-foreground uppercase;
+  }
+
+  /* Horizontal scrollers (chart axes, filter rails) that must not widen the
+     page. The negative margin lets the scrolled content bleed to the gutter
+     while its focus rings stay unclipped. */
+  .scroll-x {
+    @apply -mx-1 overflow-x-auto px-1;
+    scrollbar-width: thin;
+    overscroll-behavior-x: contain;
+  }
+}
+
+/* Reserves room for the mobile tab bar plus the home-indicator inset. The
+   desktop value is folded in here rather than left to a `md:pb-*` utility,
+   because both would land in the same cascade layer at the same specificity and
+   the winner would depend on emission order.
+
+   These are `@utility` rather than plain classes in `@layer utilities`, which is
+   what makes `@variant lg` compile to a media query - inside a `@layer` block it
+   flattens to a second unconditional rule, and the desktop padding then applies
+   on phones too. */
+@utility pb-safe-nav {
+  padding-bottom: calc(
+    var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 1.5rem
+  );
+
+  @variant lg {
+    padding-bottom: calc(var(--spacing) * 12);
+  }
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

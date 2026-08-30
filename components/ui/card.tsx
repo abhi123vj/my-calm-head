@@ -2,6 +2,12 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * White surface, one hairline border, one very soft shadow. The previous
+ * `ring-1` produced a second visible edge whenever cards sat next to bordered
+ * elements; a single border keeps every surface in the app terminating the
+ * same way.
+ */
 function Card({
   className,
   size = "default",
@@ -12,7 +18,11 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border bg-card py-(--card-spacing) text-body text-card-foreground shadow-card",
+        "[--card-spacing:--spacing(4)] sm:[--card-spacing:--spacing(5)]",
+        "has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0",
+        "data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:sm:[--card-spacing:--spacing(4)] data-[size=sm]:has-data-[slot=card-footer]:pb-0",
+        "*:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         className
       )}
       {...props}
@@ -33,12 +43,22 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * `as` exists so a card that genuinely heads a section of the page can emit a
+ * real heading element, which is what puts it in the document outline for a
+ * screen reader. It stays a `div` by default, for cards that are only a visual
+ * grouping.
+ */
+function CardTitle({
+  className,
+  as: Tag = "div",
+  ...props
+}: React.ComponentProps<"div"> & { as?: "div" | "h2" | "h3" }) {
   return (
-    <div
+    <Tag
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        "font-heading text-heading text-foreground group-data-[size=sm]/card:text-subheading",
         className
       )}
       {...props}
@@ -50,7 +70,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-body-sm text-muted-foreground", className)}
       {...props}
     />
   )
@@ -84,7 +104,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
+        "flex items-center rounded-b-xl border-t border-border bg-surface-sunken/70 p-(--card-spacing)",
         className
       )}
       {...props}
