@@ -1,6 +1,7 @@
 import type {
   DurationKind,
   HelpedValue,
+  SleepQuality,
   TimePrecision,
 } from "@/lib/migraines/catalog";
 import type { MidasAnswers } from "@/lib/midas";
@@ -40,6 +41,10 @@ export type WizardState = {
 
   medications: MedicationDraft[];
   reliefMethods: ReliefDraft[];
+
+  /** Kept as text so a half-typed "6." is not coerced to a number. */
+  sleepHours: string;
+  sleepQuality: SleepQuality | null;
 
   midas: MidasDraft;
   notes: string;
@@ -105,6 +110,9 @@ export function createInitialState(now: Date = new Date()): WizardState {
     medications: [],
     reliefMethods: [],
 
+    sleepHours: "",
+    sleepQuality: null,
+
     midas: { ...EMPTY_MIDAS_DRAFT },
     notes: "",
   };
@@ -155,6 +163,13 @@ export function stateFromMigraine(migraine: Migraine): WizardState {
       method: relief.method,
       helped: relief.helped,
     })),
+
+    sleepHours:
+      migraine.sleep?.durationHours === null ||
+      migraine.sleep?.durationHours === undefined
+        ? ""
+        : String(migraine.sleep.durationHours),
+    sleepQuality: migraine.sleep?.quality ?? null,
 
     midas: migraine.midas
       ? (Object.fromEntries(
@@ -237,6 +252,11 @@ export function toInput(
       helped: relief.helped,
     })),
 
+    sleep: {
+      durationHours: parseSleepHours(state.sleepHours),
+      quality: state.sleepQuality,
+    },
+
     midas: isMidasDraftEmpty(state.midas) ? null : toMidasAnswers(state.midas),
 
     notes: state.notes,
@@ -249,6 +269,14 @@ export function customToMinutes(state: WizardState): number | null {
   const total =
     (Number.isNaN(hours) ? 0 : hours) * 60 + (Number.isNaN(minutes) ? 0 : minutes);
   return total > 0 ? total : null;
+}
+
+/** Blank or unparseable means "not recorded", never 0 hours of sleep. */
+export function parseSleepHours(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export function isMidasDraftEmpty(draft: MidasDraft): boolean {

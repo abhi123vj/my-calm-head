@@ -10,10 +10,13 @@ import {
   SEVERITY_ANCHOR_HIGH,
   SEVERITY_ANCHOR_LOW,
   SEVERITY_LABELS,
+  SLEEP_QUALITY_LABELS,
+  SLEEP_QUALITY_LEVELS,
   SYMPTOMS,
   TIME_PRECISIONS,
   TIME_PRECISION_LABELS,
   labelFor,
+  type SleepQuality,
   type TimePrecision,
 } from "@/lib/migraines/catalog";
 import { formatDuration } from "@/lib/time";
@@ -22,6 +25,7 @@ import {
   createInitialState,
   customToMinutes,
   isMidasDraftEmpty,
+  parseSleepHours,
   toInput,
   toMidasAnswers,
   type WizardState,
@@ -46,6 +50,7 @@ type StepId =
   | "location"
   | "symptoms"
   | "triggers"
+  | "sleep"
   | "medications"
   | "relief"
   | "midas"
@@ -60,6 +65,7 @@ const STEPS: { id: StepId; title: string; question: string }[] = [
   { id: "location", title: "Location", question: "Where did it hurt?" },
   { id: "symptoms", title: "Symptoms", question: "What symptoms did you experience?" },
   { id: "triggers", title: "Triggers", question: "What could have triggered the episode?" },
+  { id: "sleep", title: "Sleep", question: "How did you sleep beforehand?" },
   { id: "medications", title: "Medication", question: "What medications did you take?" },
   { id: "relief", title: "Relief", question: "What relief methods did you try?" },
   { id: "midas", title: "Activity impact", question: "How did this episode affect your activities?" },
@@ -289,6 +295,8 @@ function StepBody({
           </p>
         </div>
       );
+    case "sleep":
+      return <SleepStep state={state} patch={patch} />;
     case "medications":
       return (
         <MedicationsEditor
@@ -445,6 +453,66 @@ function PrecisionPicker({
           {TIME_PRECISION_LABELS[precision]}
         </button>
       ))}
+    </div>
+  );
+}
+
+function SleepStep({
+  state,
+  patch,
+}: {
+  state: WizardState;
+  patch: (changes: Partial<WizardState>) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-1.5">
+        <Label htmlFor="sleep-hours">Hours slept</Label>
+        <Input
+          id="sleep-hours"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          max={24}
+          step={0.5}
+          value={state.sleepHours}
+          placeholder="e.g. 6.5"
+          onChange={(event) => patch({ sleepHours: event.target.value })}
+          className="w-32"
+        />
+        <p className="text-muted-foreground text-xs">
+          The night before the episode. Half hours are fine.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Sleep quality</Label>
+        <div className="flex flex-wrap gap-2">
+          {SLEEP_QUALITY_LEVELS.map((quality) => (
+            <button
+              key={quality}
+              type="button"
+              aria-pressed={state.sleepQuality === quality}
+              // Pressing the active choice clears it, so a mis-tap can be taken
+              // back without needing a separate "not recorded" option.
+              onClick={() =>
+                patch({
+                  sleepQuality:
+                    state.sleepQuality === quality ? null : (quality as SleepQuality),
+                })
+              }
+              className={cn(
+                "rounded-full border px-3 py-1.5 text-sm transition-colors",
+                state.sleepQuality === quality
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-input hover:bg-muted",
+              )}
+            >
+              {SLEEP_QUALITY_LABELS[quality]}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -703,6 +771,11 @@ function ReviewStep({
       value: <ValueChips values={state.possibleTriggers} />,
     },
     {
+      step: "sleep",
+      label: "Sleep",
+      value: describeSleep(state),
+    },
+    {
       step: "medications",
       label: "Medication",
       value: describeMedications(state),
@@ -792,6 +865,14 @@ function describeDuration(state: WizardState): string {
     default:
       return "Unknown";
   }
+}
+
+function describeSleep(state: WizardState): string {
+  const hours = parseSleepHours(state.sleepHours);
+  const parts: string[] = [];
+  if (hours !== null) parts.push(`${hours} hour${hours === 1 ? "" : "s"}`);
+  if (state.sleepQuality) parts.push(SLEEP_QUALITY_LABELS[state.sleepQuality].toLowerCase());
+  return parts.length > 0 ? parts.join(" · ") : "Not recorded";
 }
 
 function describeMedications(state: WizardState): React.ReactNode {

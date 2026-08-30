@@ -1,6 +1,7 @@
 import type {
   DurationKind,
   HelpedValue,
+  SleepQuality,
   TimePrecision,
 } from "@/lib/migraines/catalog";
 import type { MidasAnswers, MidasResult } from "@/lib/midas";
@@ -33,6 +34,9 @@ export type Migraine = {
 
   medications: MigraineMedication[];
   reliefMethods: MigraineReliefMethod[];
+
+  /** Sleep before the episode; `null` when nothing about it was recorded. */
+  sleep: MigraineSleep | null;
 
   /** Raw MIDAS answers, preserved so the score can be recalculated. */
   midas: MidasAnswers | null;
@@ -96,6 +100,12 @@ export type MigraineMedication = {
   takenAtLocal: string | null;
   helped: HelpedValue | null;
   notes: string | null;
+};
+
+export type MigraineSleep = {
+  /** Hours slept, to the nearest half hour. */
+  durationHours: number | null;
+  quality: SleepQuality | null;
 };
 
 export type MigraineReliefMethod = {

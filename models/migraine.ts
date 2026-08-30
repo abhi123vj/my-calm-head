@@ -10,6 +10,7 @@ import type {
   Migraine,
   MigraineMedication,
   MigraineReliefMethod,
+  MigraineSleep,
   MigraineStatus,
 } from "@/types/migraine";
 
@@ -54,6 +55,8 @@ export type MigraineDocument = {
 
   medications: MigraineMedication[];
   reliefMethods: MigraineReliefMethod[];
+
+  sleep: MigraineSleep | null;
 
   midas: MidasAnswers | null;
 
@@ -113,10 +116,19 @@ export function toMigraineContent(input: MigraineInput): MigraineContent {
     medications: input.medications,
     reliefMethods: input.reliefMethods,
 
+    // An all-blank sleep record carries no information; storing null keeps
+    // "not recorded" a single unambiguous shape.
+    sleep: emptySleepToNull(input.sleep),
+
     midas: input.midas,
 
     notes: input.notes,
   };
+}
+
+function emptySleepToNull(sleep: MigraineSleep | null): MigraineSleep | null {
+  if (sleep === null) return null;
+  return sleep.durationHours === null && sleep.quality === null ? null : sleep;
 }
 
 /** Stored document -> the shape the rest of the app consumes. */
@@ -149,6 +161,8 @@ export function toMigraine(document: WithId<MigraineDocument>): Migraine {
 
     medications: document.medications,
     reliefMethods: document.reliefMethods,
+
+    sleep: document.sleep ?? null,
 
     midas: document.midas,
     midasResult: scoreMidas(document.midas),

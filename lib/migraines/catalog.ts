@@ -212,6 +212,26 @@ export const RELIEF_METHODS: readonly CatalogItem[] = [
   { id: "food", label: "Food" },
 ] as const;
 
+// --- Sleep ------------------------------------------------------------------
+
+/**
+ * Sleep before the episode. Recorded as context, alongside the sleep-related
+ * options in the trigger list - those say what you suspected, this says what
+ * you actually got.
+ */
+export const SLEEP_QUALITY_LEVELS = ["poor", "fair", "good", "very-good"] as const;
+export type SleepQuality = (typeof SLEEP_QUALITY_LEVELS)[number];
+
+export const SLEEP_QUALITY_LABELS: Record<SleepQuality, string> = {
+  poor: "Poor",
+  fair: "Fair",
+  good: "Good",
+  "very-good": "Very good",
+};
+
+/** A single night cannot exceed this; anything more is a data-entry error. */
+export const MAX_SLEEP_HOURS = 24;
+
 // --- Did it help? -----------------------------------------------------------
 
 export const HELPED_VALUES = ["yes", "no", "unsure"] as const;

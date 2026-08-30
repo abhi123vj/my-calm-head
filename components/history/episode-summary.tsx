@@ -1,6 +1,7 @@
 import {
   HELPED_LABELS,
   SEVERITY_LABELS,
+  SLEEP_QUALITY_LABELS,
   isCustomValue,
   labelFor,
 } from "@/lib/migraines/catalog";
@@ -86,6 +87,22 @@ export function EpisodeSummary({ migraine }: { migraine: Migraine }) {
           <BulletList values={migraine.possibleTriggers} />
           <p className="text-muted-foreground text-xs">
             Things noted around this episode. Not a statement of cause.
+          </p>
+        </Section>
+      ) : null}
+
+      {migraine.sleep ? (
+        <Section label="Sleep beforehand">
+          <p>
+            {migraine.sleep.durationHours !== null
+              ? `${migraine.sleep.durationHours} hour${migraine.sleep.durationHours === 1 ? "" : "s"}`
+              : "Duration not recorded"}
+            {migraine.sleep.quality ? (
+              <span className="text-muted-foreground">
+                {" "}
+                &middot; {SLEEP_QUALITY_LABELS[migraine.sleep.quality]}
+              </span>
+            ) : null}
           </p>
         </Section>
       ) : null}

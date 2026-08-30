@@ -4,7 +4,9 @@ import {
   DURATION_KINDS,
   HELPED_VALUES,
   MAX_SEVERITY,
+  MAX_SLEEP_HOURS,
   MIN_SEVERITY,
+  SLEEP_QUALITY_LEVELS,
   TIME_PRECISIONS,
 } from "@/lib/migraines/catalog";
 import { MIDAS_RECALL_DAYS } from "@/lib/midas";
@@ -151,6 +153,22 @@ export const medicationSchema = z.object({
   notes: optionalText,
 });
 
+export const sleepSchema = z
+  .object({
+    durationHours: z
+      .number()
+      .min(0, { error: "Sleep cannot be negative." })
+      .max(MAX_SLEEP_HOURS, { error: `Sleep cannot exceed ${MAX_SLEEP_HOURS} hours.` })
+      .nullish()
+      .transform((value) => value ?? null),
+    quality: z
+      .enum(SLEEP_QUALITY_LEVELS)
+      .nullish()
+      .transform((value) => value ?? null),
+  })
+  .nullish()
+  .transform((value) => value ?? null);
+
 export const reliefMethodSchema = z.object({
   method: requiredText,
   helped: helpedSchema,
@@ -195,6 +213,8 @@ export const migraineInputSchema = z
 
     medications: z.array(medicationSchema).default([]),
     reliefMethods: z.array(reliefMethodSchema).default([]),
+
+    sleep: sleepSchema,
 
     midas: midasAnswersSchema
       .nullish()
