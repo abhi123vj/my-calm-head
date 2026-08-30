@@ -5,11 +5,14 @@ import {
 } from "@/lib/migraines/catalog";
 import { todayLocalDate } from "@/lib/migraines/calendar";
 import {
+  TIME_BUCKETS,
   durationStats,
   frequency,
+  helpedTallies,
   severityStats,
   weekdayOf,
 } from "@/lib/migraines/stats";
+import type { HelpedTally } from "@/lib/migraines/stats";
 import { formatDuration } from "@/lib/time";
 import { localParts } from "@/lib/time";
 import type { Migraine } from "@/types/migraine";
@@ -66,15 +69,6 @@ const WEEKDAY_NAMES = [
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
-] as const;
-
-type TimeBucket = { id: string; label: string; from: number; to: number };
-
-const TIME_BUCKETS: readonly TimeBucket[] = [
-  { id: "night", label: "at night", from: 0, to: 5 },
-  { id: "morning", label: "in the morning", from: 6, to: 11 },
-  { id: "afternoon", label: "in the afternoon", from: 12, to: 17 },
-  { id: "evening", label: "in the evening", from: 18, to: 23 },
 ] as const;
 
 export function buildInsights(
@@ -220,8 +214,8 @@ function frequencySection(episodes: Migraine[]): InsightSection {
       id: "time-of-day",
       statement:
         topBuckets.length === 1
-          ? `More episodes started ${topBuckets[0].label} than at any other time.`
-          : `Episodes were evenly split ${joinList(topBuckets.map((bucket) => bucket.label))}.`,
+          ? `More episodes started ${topBuckets[0].phrase} than at any other time.`
+          : `Episodes were evenly split ${joinList(topBuckets.map((bucket) => bucket.phrase))}.`,
       basis: `${topCount} of ${timed.length} episodes with a recorded time${
         untimed > 0
           ? `; ${untimed} without a recorded time excluded`
@@ -526,7 +520,7 @@ function recordedAlongsideSection(episodes: Migraine[]): InsightSection {
 function respondedSection(episodes: Migraine[]): InsightSection {
   const insights: Insight[] = [];
 
-  const medications = tallyHelped(
+  const medications = helpedTallies(
     episodes.flatMap((episode) =>
       episode.medications.map((medication) => ({
         key: medication.name,
@@ -535,7 +529,7 @@ function respondedSection(episodes: Migraine[]): InsightSection {
     ),
   );
 
-  const reliefs = tallyHelped(
+  const reliefs = helpedTallies(
     episodes.flatMap((episode) =>
       episode.reliefMethods.map((relief) => ({
         key: relief.method,
@@ -572,37 +566,6 @@ function respondedSection(episodes: Migraine[]): InsightSection {
   }
 
   return { id: "responded", title: "What you recorded taking and trying", insights };
-}
-
-type HelpedTally = {
-  key: string;
-  total: number;
-  yes: number;
-  no: number;
-  unsure: number;
-  unrecorded: number;
-};
-
-function tallyHelped(
-  entries: { key: string; helped: string | null }[],
-): HelpedTally[] {
-  const byKey = new Map<string, HelpedTally>();
-
-  for (const entry of entries) {
-    const tally =
-      byKey.get(entry.key) ??
-      { key: entry.key, total: 0, yes: 0, no: 0, unsure: 0, unrecorded: 0 };
-    tally.total += 1;
-    if (entry.helped === "yes") tally.yes += 1;
-    else if (entry.helped === "no") tally.no += 1;
-    else if (entry.helped === "unsure") tally.unsure += 1;
-    else tally.unrecorded += 1;
-    byKey.set(entry.key, tally);
-  }
-
-  return [...byKey.values()].sort(
-    (a, b) => b.total - a.total || a.key.localeCompare(b.key),
-  );
 }
 
 function describeHelped(tally: HelpedTally): string {

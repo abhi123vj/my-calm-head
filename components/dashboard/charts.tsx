@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 
 import { severityBand } from "@/lib/migraines/severity-scale";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -12,8 +13,9 @@ import {
 /**
  * Charts built from plain elements rather than a charting library.
  *
- * Every chart here is a bar chart, which CSS draws exactly and accessibly with
- * no dependency, no client JavaScript, and no hydration. Each one carries a
+ * Bars are drawn with CSS and the one line chart with inline SVG, which between
+ * them cover everything this dashboard needs exactly and accessibly, with no
+ * dependency, no client JavaScript, and no hydration. Each chart carries a
  * `title` for hover detail and a collapsed table underneath, so the numbers are
  * always reachable without relying on colour or on pointer hover.
  */
@@ -24,14 +26,17 @@ const BAR_COLOR = "var(--chart-1)";
 export function ChartCard({
   title,
   description,
+  className,
   children,
 }: {
   title: string;
   description?: string;
+  /** For the chart that wants the full width of the grid. */
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
         <CardTitle as="h2">{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
@@ -64,28 +69,39 @@ export type ColumnDatum = {
  * chart back into a table. When several bars tie for the maximum, none are
  * labelled, because labelling all of them is the thing being avoided. The table
  * below carries every value either way.
+ *
+ * `maxValue` fixes the top of the scale. Counts have no natural ceiling and are
+ * scaled to their own peak, but a bounded measure must not be: an average
+ * severity of 4 drawn full-height because 4 was the highest month reads as a
+ * severe month. Passing the scale's own maximum keeps the bar heights meaning
+ * what the reader assumes they mean.
  */
 export function ColumnChart({
   data,
   valueSuffix = "",
   emptyMessage = "Nothing recorded yet.",
   tableHeading,
+  maxValue,
 }: {
   data: ColumnDatum[];
   valueSuffix?: string;
   emptyMessage?: string;
   tableHeading: string;
+  maxValue?: number;
 }) {
-  const max = Math.max(...data.map((datum) => datum.value), 0);
+  const peak = Math.max(...data.map((datum) => datum.value), 0);
 
-  if (max === 0) {
+  if (peak === 0) {
     return <ChartEmpty>{emptyMessage}</ChartEmpty>;
   }
 
+  // Never below the data: a fixed ceiling scales the chart, it cannot clip it.
+  const max = maxValue === undefined ? peak : Math.max(maxValue, peak);
+
   // Only a single, unambiguous peak earns a direct label.
   const peakKey =
-    data.filter((datum) => datum.value === max).length === 1
-      ? data.find((datum) => datum.value === max)?.key
+    data.filter((datum) => datum.value === peak).length === 1
+      ? data.find((datum) => datum.value === peak)?.key
       : undefined;
 
   return (
@@ -232,6 +248,291 @@ export function SeverityDistribution({
         }`,
       }))}
     />
+  );
+}
+
+export type StackedSegment = {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
+};
+
+export type StackedDatum = {
+  key: string;
+  label: string;
+  /** The sum of the segments, and the row's own bar length. */
+  total: number;
+  segments: StackedSegment[];
+  /** The row spelled out for the table underneath. */
+  detail: string;
+};
+
+/**
+ * Horizontal bars split into parts.
+ *
+ * Row length is scaled to the largest total rather than to 100%, so a bar says
+ * two things at once: how often something was recorded, and how the notes on it
+ * were divided. Segments are therefore comparable across rows as well as within
+ * one - a row half the length of another really was recorded half as often.
+ *
+ * Zero-value segments are dropped rather than drawn as slivers.
+ */
+export function StackedBars({
+  data,
+  legend,
+  emptyMessage,
+  tableHeading,
+}: {
+  data: StackedDatum[];
+  legend: readonly { key: string; label: string; color: string }[];
+  emptyMessage: string;
+  tableHeading: string;
+}) {
+  const max = Math.max(...data.map((datum) => datum.total), 0);
+
+  if (data.length === 0 || max === 0) {
+    return <ChartEmpty>{emptyMessage}</ChartEmpty>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <ul className="space-y-2.5">
+        {data.map((datum) => (
+          <li key={datum.key} className="space-y-1.5" title={datum.detail}>
+            <div className="text-body-sm flex items-baseline justify-between gap-3">
+              <span className="min-w-0 truncate">{datum.label}</span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">
+                {datum.total}
+              </span>
+            </div>
+            <div className="bg-lavender h-2.5 w-full overflow-hidden rounded-full">
+              <div
+                className="flex h-full"
+                style={{ width: `${(datum.total / max) * 100}%` }}
+              >
+                {datum.segments
+                  .filter((segment) => segment.value > 0)
+                  .map((segment) => (
+                    <div
+                      key={segment.key}
+                      title={`${datum.label}: ${segment.value} ${segment.label.toLowerCase()}`}
+                      style={{
+                        width: `${(segment.value / datum.total) * 100}%`,
+                        backgroundColor: segment.color,
+                      }}
+                    />
+                  ))}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <ChartLegend items={legend} />
+
+      <DataTable
+        heading={tableHeading}
+        rows={data.map((datum) => ({
+          key: datum.key,
+          label: datum.label,
+          value: datum.detail,
+        }))}
+      />
+    </div>
+  );
+}
+
+/** Names the colours, so a segment never has to be identified by hue alone. */
+function ChartLegend({
+  items,
+}: {
+  items: readonly { key: string; label: string; color: string }[];
+}) {
+  return (
+    <ul className="flex flex-wrap gap-x-3 gap-y-1.5">
+      {items.map((item) => (
+        <li
+          key={item.key}
+          className="text-caption text-muted-foreground flex items-center gap-1.5"
+        >
+          <span
+            aria-hidden
+            className="size-2.5 shrink-0 rounded-[3px]"
+            style={{ backgroundColor: item.color }}
+          />
+          {item.label}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export type LinePoint = {
+  key: string;
+  /** Names the point in the table underneath. */
+  label: string;
+  value: number;
+  /** Hover detail, as on every other chart here. */
+  title: string;
+  /** Printed on the axis when set; most points leave it out. */
+  tick?: string;
+  /** What the table prints instead of `value`. */
+  displayValue?: string;
+};
+
+/**
+ * A single line over a continuous measure.
+ *
+ * Reserved for quantities that really are continuous. Counts per month are
+ * separate buckets and belong in columns; a rolling figure moves a little every
+ * day, and joining its samples with a line says something true about the days
+ * between them.
+ *
+ * The plot is one `viewBox` stretched to the container with
+ * `preserveAspectRatio="none"`, so the line fills the card at any width. That
+ * would distort anything drawn on it, which is why the marks are limited to
+ * strokes kept at a constant width by `vector-effect` and to rectangles - and
+ * why the hover targets are invisible bands rather than dots on the line.
+ */
+export function LineChart({
+  data,
+  maxValue,
+  valueSuffix = "",
+  emptyMessage,
+  tableHeading,
+  summary,
+}: {
+  data: LinePoint[];
+  maxValue?: number;
+  valueSuffix?: string;
+  emptyMessage: string;
+  tableHeading: string;
+  /** Describes the whole chart for anyone who cannot see it. */
+  summary: string;
+}) {
+  // A single sample is a dot, not a trend; the table still holds the figure.
+  if (data.length < 2) {
+    return <ChartEmpty>{emptyMessage}</ChartEmpty>;
+  }
+
+  const peak = Math.max(...data.map((datum) => datum.value), 0);
+  // Never zero: a flat run of nothing recorded must still draw on the baseline
+  // rather than divide by zero.
+  const max = Math.max(maxValue ?? 0, peak, 1);
+  const step = 100 / (data.length - 1);
+
+  const coordinates = data.map((datum, index) => ({
+    x: index * step,
+    y: 100 - (datum.value / max) * 100,
+  }));
+
+  const line = coordinates
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"}${point.x.toFixed(2)} ${point.y.toFixed(2)}`,
+    )
+    .join(" ");
+  const area = `${line} L100 100 L0 100 Z`;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {/* The scale, in HTML rather than in the SVG: text inside a stretched
+            viewBox would be stretched with it. */}
+        <div className="text-muted-foreground flex h-36 shrink-0 flex-col justify-between text-[10px] tabular-nums sm:h-40">
+          <span>
+            {formatValue(max)}
+            {valueSuffix}
+          </span>
+          <span>0</span>
+        </div>
+
+        {/* The plot and the axis share one column, so a tick sits exactly under
+            the sample it names. */}
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="border-border h-36 border-b sm:h-40">
+            <svg
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="h-full w-full overflow-visible"
+              role="img"
+              aria-label={summary}
+            >
+              <line
+                x1="0"
+                x2="100"
+                y1="50"
+                y2="50"
+                stroke="var(--border)"
+                strokeWidth="1"
+                strokeDasharray="3 3"
+                vectorEffect="non-scaling-stroke"
+              />
+              <path d={area} fill={BAR_COLOR} fillOpacity="0.12" />
+              <path
+                d={line}
+                fill="none"
+                stroke={BAR_COLOR}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* One band per sample, so hover detail works the way it does on the
+                bars without putting a distorted dot on the line. */}
+              {data.map((datum, index) => (
+                <rect
+                  key={datum.key}
+                  x={Math.max(0, coordinates[index].x - step / 2)}
+                  y="0"
+                  width={
+                    index === 0 || index === data.length - 1 ? step / 2 : step
+                  }
+                  height="100"
+                  fill="transparent"
+                >
+                  <title>{datum.title}</title>
+                </rect>
+              ))}
+            </svg>
+          </div>
+
+          <div className="text-muted-foreground relative h-3.5 text-[10px]">
+            {data.map((datum, index) =>
+              datum.tick ? (
+                <span
+                  key={datum.key}
+                  // The end ticks are pulled inside the plot rather than
+                  // centred, so neither one hangs off the edge of the card.
+                  className={cn(
+                    "absolute whitespace-nowrap",
+                    index === 0
+                      ? "translate-x-0"
+                      : index === data.length - 1
+                        ? "-translate-x-full"
+                        : "-translate-x-1/2",
+                  )}
+                  style={{ left: `${coordinates[index].x}%` }}
+                >
+                  {datum.tick}
+                </span>
+              ) : null,
+            )}
+          </div>
+        </div>
+      </div>
+
+      <DataTable
+        heading={tableHeading}
+        rows={data.map((datum) => ({
+          key: datum.key,
+          label: datum.label,
+          value:
+            datum.displayValue ?? `${formatValue(datum.value)}${valueSuffix}`,
+        }))}
+      />
+    </div>
   );
 }
 

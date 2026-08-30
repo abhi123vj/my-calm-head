@@ -41,6 +41,12 @@ export function formatShortDate(local: string): string {
   return `${WEEKDAYS[weekday]}, ${Number(day)} ${MONTHS[Number(month) - 1].slice(0, 3)} ${year}`;
 }
 
+/** `"2026-08-30T14:30"` -> `"Aug"`. */
+export function formatMonthAbbr(local: string): string {
+  const { date } = localParts(local);
+  return MONTHS[Number(date.slice(5, 7)) - 1].slice(0, 3);
+}
+
 /** `"2026-08-30T14:30"` -> `"2:30 pm"`. */
 export function formatLocalTime(local: string): string {
   const { hour, minute } = localParts(local);

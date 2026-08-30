@@ -5,26 +5,44 @@ import { CircleAlert, NotebookPen, Plus } from "lucide-react";
 import { requireSession } from "@/lib/auth/dal";
 import { listMigraines } from "@/lib/migraines/repository";
 import {
+  durationDistribution,
   durationStats,
   frequency,
+  gapStats,
+  helpedTallies,
+  medicationDays,
   monthlySeries,
   ongoingEpisodes,
   periodCounts,
   recentEpisodes,
+  rollingWindowSeries,
   severityStats,
+  timeOfDayDistribution,
+  weekdayDistribution,
+  windowComparison,
 } from "@/lib/migraines/stats";
+import type { HelpedTally } from "@/lib/migraines/stats";
 import { formatDuration } from "@/lib/time";
-import { formatShortDate, startTimeOrNull } from "@/lib/migraines/format";
-import { labelFor } from "@/lib/migraines/catalog";
+import {
+  formatMonthAbbr,
+  formatShortDate,
+  startTimeOrNull,
+} from "@/lib/migraines/format";
+import { monthLabel } from "@/lib/migraines/calendar";
+import { HELPED_LABELS, MAX_SEVERITY, labelFor } from "@/lib/migraines/catalog";
 import { severityBand } from "@/lib/migraines/severity-scale";
 import { elapsedMinutesSince } from "@/lib/migraines/duration";
 import { MiniStat, StatTile } from "@/components/dashboard/stat-tile";
+import type { Trend } from "@/components/dashboard/stat-tile";
 import {
   ChartCard,
   ColumnChart,
   FrequencyBars,
+  LineChart,
   SeverityDistribution,
+  StackedBars,
 } from "@/components/dashboard/charts";
+import type { LinePoint, StackedDatum } from "@/components/dashboard/charts";
 import {
   EpisodeListItem,
   EpisodeStatusBadges,
@@ -43,6 +61,10 @@ export const metadata: Metadata = {
 const MONTHS_SHOWN = 12;
 const TOP_N = 8;
 const RECENT_N = 5;
+/** The rolling window the "recently" figures are measured over. */
+const WINDOW_DAYS = 30;
+/** How far back the rolling line runs, sampled once a week. */
+const ROLLING_WEEKS = 52;
 
 export default async function DashboardPage() {
   await requireSession();
@@ -53,14 +75,47 @@ export default async function DashboardPage() {
   // grows past a few thousand, move the aggregation into MongoDB.
   const episodes = await listMigraines({ sort: "oldest" });
 
-  const counts = periodCounts(episodes);
+  const now = new Date();
+  const counts = periodCounts(episodes, now);
   const severity = severityStats(episodes);
   const duration = durationStats(episodes);
-  const months = monthlySeries(episodes, MONTHS_SHOWN);
+  const months = monthlySeries(episodes, MONTHS_SHOWN, now);
   const symptoms = frequency(episodes, (episode) => episode.symptoms, TOP_N);
   const triggers = frequency(episodes, (episode) => episode.possibleTriggers, TOP_N);
+  const locations = frequency(episodes, (episode) => episode.painLocations, TOP_N);
   const recent = recentEpisodes(episodes, RECENT_N);
   const ongoing = ongoingEpisodes(episodes);
+
+  const gaps = gapStats(episodes, now);
+  const recently = windowComparison(episodes, WINDOW_DAYS, now);
+  const medication = medicationDays(episodes, WINDOW_DAYS, now);
+  const currentMonth = months[months.length - 1];
+
+  const rolling = rollingLine(
+    rollingWindowSeries(episodes, WINDOW_DAYS, ROLLING_WEEKS, now),
+  );
+
+  const weekdays = weekdayDistribution(episodes);
+  const timeOfDay = timeOfDayDistribution(episodes);
+  const durations = durationDistribution(episodes);
+
+  const medications = helpedTallies(
+    episodes.flatMap((episode) =>
+      episode.medications.map((medication) => ({
+        key: medication.name,
+        helped: medication.helped,
+      })),
+    ),
+  ).slice(0, TOP_N);
+
+  const reliefs = helpedTallies(
+    episodes.flatMap((episode) =>
+      episode.reliefMethods.map((relief) => ({
+        key: relief.method,
+        helped: relief.helped,
+      })),
+    ),
+  ).slice(0, TOP_N);
 
   if (episodes.length === 0) {
     return <EmptyDashboard />;
@@ -100,6 +155,43 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
+      {/* The figures that change day to day, kept together and above the
+          all-time averages: "how long has it been" is the question this screen
+          is opened with. */}
+      <section className="space-y-3">
+        <h2 className="eyebrow">Where things stand</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatTile
+            label="Since the last episode"
+            value={describeDaysSince(gaps.daysSinceLast)}
+            note={describeGap(gaps)}
+          />
+          <StatTile
+            label={`Last ${WINDOW_DAYS} days`}
+            value={plural(recently.current, "episode")}
+            trend={describeTrend(recently)}
+          />
+          <StatTile
+            label="Headache days this month"
+            value={plural(currentMonth.headacheDays, "day")}
+            note={
+              currentMonth.count === 0
+                ? `None recorded so far in ${monthLabel({ year: now.getFullYear(), month: now.getMonth() + 1 })}.`
+                : `${plural(currentMonth.count, "episode")} this month; two on one day count as one day.`
+            }
+          />
+          <StatTile
+            label="Days with medication"
+            value={plural(medication.days, "day")}
+            note={
+              medication.episodes === 0
+                ? `No episodes in the last ${WINDOW_DAYS} days.`
+                : `Days in the last ${WINDOW_DAYS} days on which you recorded taking something, over ${plural(medication.episodes, "episode")}.`
+            }
+          />
+        </div>
+      </section>
+
       <section className="space-y-3">
         <h2 className="eyebrow">Averages</h2>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -126,7 +218,7 @@ export default async function DashboardPage() {
 
       <section className="space-y-3">
         <h2 className="eyebrow">Most recorded</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <StatTile
             label="Symptom"
             value={symptoms[0]?.label ?? "—"}
@@ -143,6 +235,15 @@ export default async function DashboardPage() {
               triggers[0]
                 ? `Recorded alongside ${triggers[0].count} of ${counts.total} episodes`
                 : "No triggers recorded yet"
+            }
+          />
+          <StatTile
+            label="Pain location"
+            value={locations[0]?.label ?? "—"}
+            note={
+              locations[0]
+                ? `Recorded on ${locations[0].count} of ${counts.total} episodes`
+                : "No pain locations recorded yet"
             }
           />
         </div>
@@ -166,8 +267,24 @@ export default async function DashboardPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="eyebrow">Trends</h2>
+        <h2 className="eyebrow">Over time</h2>
         <div className="grid gap-4 lg:grid-cols-2">
+          {/* Given the width of the grid: a line is read left to right, and
+              squeezing a year of it into half a row makes every rise look
+              alarming. */}
+          <ChartCard
+            className="lg:col-span-2"
+            title={`Episodes in a rolling ${WINDOW_DAYS} days`}
+            description={`Each point counts the episodes in the ${WINDOW_DAYS} days ending on it, sampled weekly. A month is an arbitrary place to cut a run of episodes; a window that slides has no edges for one to hide behind.`}
+          >
+            <LineChart
+              tableHeading={`Episodes in the ${WINDOW_DAYS} days to each date`}
+              summary={`A line chart of how many episodes fell in the ${WINDOW_DAYS} days ending on each weekly sample, over the last year. The figures are in the table below.`}
+              emptyMessage={`This needs ${WINDOW_DAYS} days of records before it can plot a point. Keep logging and it will fill in.`}
+              data={rolling}
+            />
+          </ChartCard>
+
           <ChartCard
             title="Episodes per month"
             description={`The last ${MONTHS_SHOWN} months. Empty months are shown so a quiet stretch stays visible.`}
@@ -180,20 +297,27 @@ export default async function DashboardPage() {
                 label: point.label,
                 sublabel: point.label === "Jan" ? String(point.year) : undefined,
                 value: point.count,
+                // Months where episodes doubled up on a day say so, so the bar
+                // is not read as a count of days off.
+                displayValue:
+                  point.count === point.headacheDays
+                    ? String(point.count)
+                    : `${point.count} on ${point.headacheDays} days`,
                 title: `${point.label} ${point.year}: ${point.count} episode${
                   point.count === 1 ? "" : "s"
-                }`,
+                } on ${point.headacheDays} day${point.headacheDays === 1 ? "" : "s"}`,
               }))}
             />
           </ChartCard>
 
           <ChartCard
             title="Average severity per month"
-            description="Months with no recorded severity are blank rather than zero."
+            description="Drawn on the full 1-10 scale, so a bar height means the same thing in every month. Months with no recorded severity are blank rather than zero."
           >
             <ColumnChart
               tableHeading="Average severity per month"
               emptyMessage="No severity recorded in the last 12 months."
+              maxValue={MAX_SEVERITY}
               data={months.map((point) => ({
                 key: point.key,
                 label: point.label,
@@ -217,6 +341,59 @@ export default async function DashboardPage() {
               }))}
             />
           </ChartCard>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="eyebrow">Patterns</h2>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ChartCard
+            title="Day of the week"
+            description={`Which day episodes started on, across all ${counts.total} of them.`}
+          >
+            <ColumnChart
+              tableHeading="Episodes by day of the week"
+              emptyMessage="Nothing recorded yet."
+              data={weekdays.map((point) => ({
+                key: point.key,
+                label: point.label,
+                value: point.count,
+                title: `${point.label}: ${plural(point.count, "episode")}`,
+              }))}
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="Time of day"
+            description={describeTimeOfDayBasis(timeOfDay)}
+          >
+            <ColumnChart
+              tableHeading="Episodes by time of day"
+              emptyMessage="No start times have been recorded yet."
+              data={timeOfDay.buckets.map((bucket) => ({
+                key: bucket.key,
+                label: bucket.label,
+                value: bucket.count,
+                title: `${bucket.label}: ${plural(bucket.count, "episode")}`,
+              }))}
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="How long episodes lasted"
+            description={describeDurationBuckets(durations)}
+          >
+            <ColumnChart
+              tableHeading="Measured episodes by length"
+              emptyMessage="No episode has a measured duration yet."
+              data={durations.buckets.map((bucket) => ({
+                key: bucket.key,
+                label: bucket.label,
+                value: bucket.count,
+                title: `${bucket.label}: ${plural(bucket.count, "episode")}`,
+              }))}
+            />
+          </ChartCard>
 
           <ChartCard
             title="Severity distribution"
@@ -227,7 +404,12 @@ export default async function DashboardPage() {
               total={severity.recordedCount}
             />
           </ChartCard>
+        </div>
+      </section>
 
+      <section className="space-y-3">
+        <h2 className="eyebrow">What you recorded</h2>
+        <div className="grid gap-4 lg:grid-cols-2">
           <ChartCard
             title="Most recorded symptoms"
             description={`Across ${counts.total} episode${counts.total === 1 ? "" : "s"}.`}
@@ -259,10 +441,192 @@ export default async function DashboardPage() {
               }))}
             />
           </ChartCard>
+
+          <ChartCard
+            title="Where the pain was"
+            description={`Across ${counts.total} episode${counts.total === 1 ? "" : "s"}. One episode can have more than one location.`}
+          >
+            <FrequencyBars
+              tableHeading="Pain location frequency"
+              emptyMessage="No pain locations recorded yet."
+              data={locations.map((entry) => ({
+                key: entry.value,
+                label: entry.label,
+                value: entry.count,
+                detail: `${entry.count} of ${counts.total} episodes (${Math.round(entry.share * 100)}%)`,
+              }))}
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="Medications you recorded"
+            description="How often you took each one, and what you noted afterwards. This describes your notes, not whether anything worked."
+          >
+            <StackedBars
+              tableHeading="Medications recorded"
+              emptyMessage="No medications recorded yet."
+              legend={HELPED_SEGMENTS}
+              data={medications.map((tally) => helpedDatum(tally, "medication"))}
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="Other things you tried"
+            description="Relief methods recorded alongside episodes, with what you noted afterwards."
+          >
+            <StackedBars
+              tableHeading="Relief methods recorded"
+              emptyMessage="No relief methods recorded yet."
+              legend={HELPED_SEGMENTS}
+              data={reliefs.map((tally) => helpedDatum(tally, "relief"))}
+            />
+          </ChartCard>
         </div>
       </section>
     </div>
   );
+}
+
+/**
+ * The four "helped" answers as an ordered ramp, dark to light, ending in the
+ * neutral lavender for notes that were never made. It is a single hue because
+ * these are degrees of one answer, not four unrelated categories - and no
+ * green or red, because the app does not grade what someone took.
+ */
+const HELPED_SEGMENTS = [
+  { key: "yes", label: HELPED_LABELS.yes, color: "var(--chart-5)" },
+  { key: "unsure", label: HELPED_LABELS.unsure, color: "var(--chart-1)" },
+  { key: "no", label: HELPED_LABELS.no, color: "var(--chart-3)" },
+  { key: "unrecorded", label: "Not noted", color: "var(--lavender-strong)" },
+] as const;
+
+function helpedDatum(tally: HelpedTally, prefix: string): StackedDatum {
+  const values: Record<string, number> = {
+    yes: tally.yes,
+    unsure: tally.unsure,
+    no: tally.no,
+    unrecorded: tally.unrecorded,
+  };
+
+  const parts = HELPED_SEGMENTS.filter(
+    (segment) => values[segment.key] > 0,
+  ).map((segment) => `${values[segment.key]} ${segment.label.toLowerCase()}`);
+
+  return {
+    key: `${prefix}-${tally.key}`,
+    label: labelFor(tally.key),
+    total: tally.total,
+    segments: HELPED_SEGMENTS.map((segment) => ({
+      key: segment.key,
+      label: segment.label,
+      value: values[segment.key],
+      color: segment.color,
+    })),
+    detail: `${plural(tally.total, "episode")}: ${parts.join(", ")}`,
+  };
+}
+
+/**
+ * The rolling series as points on a line.
+ *
+ * A tick is printed only where the month turns over, so the axis reads as a
+ * year rather than as fifty-two dates.
+ */
+function rollingLine(series: ReturnType<typeof rollingWindowSeries>): LinePoint[] {
+  return series.map((point, index) => {
+    const local = `${point.date}T00:00`;
+    const month = point.date.slice(0, 7);
+    const previousMonth = index === 0 ? null : series[index - 1].date.slice(0, 7);
+    const days = `on ${plural(point.headacheDays, "day")}`;
+
+    return {
+      key: point.date,
+      label: formatShortDate(local),
+      value: point.count,
+      tick: month === previousMonth ? undefined : formatMonthAbbr(local),
+      displayValue:
+        point.count === point.headacheDays
+          ? String(point.count)
+          : `${point.count} ${days}`,
+      title: `${plural(point.count, "episode")} in the ${WINDOW_DAYS} days to ${formatShortDate(local)}, ${days}`,
+    };
+  });
+}
+
+function describeDaysSince(days: number | null): string {
+  if (days === null) return "—";
+  if (days === 0) return "Today";
+  return plural(days, "day");
+}
+
+function describeGap(gaps: ReturnType<typeof gapStats>): string {
+  if (gaps.lastDate === null) return "Nothing recorded yet.";
+
+  const last = `Last recorded ${formatShortDate(`${gaps.lastDate}T00:00`)}.`;
+  if (gaps.currentIsLongest) {
+    return `${last} That is the longest stretch without one in your record.`;
+  }
+  // Every recorded day so far runs into the next, so there is no stretch to name.
+  if (gaps.longestClearRun === 0) {
+    return `${last} No clear day between recorded episodes yet.`;
+  }
+  return `${last} Your longest stretch without one is ${plural(gaps.longestClearRun, "day")}.`;
+}
+
+function describeTrend(comparison: ReturnType<typeof windowComparison>): Trend {
+  const { windowDays, previous, change, previousWindowCovered } = comparison;
+
+  // Comparing against days you were not yet logging would describe the record
+  // growing, not the episodes changing.
+  if (!previousWindowCovered) {
+    return {
+      direction: "level",
+      label: `Your record does not yet cover the ${windowDays} days before this.`,
+    };
+  }
+
+  if (change === 0) {
+    return {
+      direction: "level",
+      label: `The same as the ${windowDays} days before (${previous}).`,
+    };
+  }
+
+  return {
+    direction: change > 0 ? "up" : "down",
+    label: `${Math.abs(change)} ${change > 0 ? "more" : "fewer"} than the ${windowDays} days before (${previous}).`,
+  };
+}
+
+function describeTimeOfDayBasis(
+  stats: ReturnType<typeof timeOfDayDistribution>,
+): string {
+  const base = "When episodes started, over the ones with a time recorded.";
+  return stats.unknownCount === 0
+    ? base
+    : `${base} ${plural(stats.unknownCount, "episode")} with no recorded time ${
+        stats.unknownCount === 1 ? "is" : "are"
+      } left out rather than placed in a bucket.`;
+}
+
+function describeDurationBuckets(
+  distribution: ReturnType<typeof durationDistribution>,
+): string {
+  const excluded: string[] = [];
+  if (distribution.estimatedCount > 0) {
+    excluded.push(`${distribution.estimatedCount} recorded as a range`);
+  }
+  if (distribution.ongoingCount > 0) {
+    excluded.push(`${distribution.ongoingCount} still ongoing`);
+  }
+  if (distribution.unknownCount > 0) {
+    excluded.push(`${distribution.unknownCount} with no duration`);
+  }
+
+  const base = `${plural(distribution.measuredCount, "episode")} with a measured length.`;
+  return excluded.length === 0
+    ? base
+    : `${base} Left out: ${excluded.join(", ")}.`;
 }
 
 function describeDurationBasis(duration: ReturnType<typeof durationStats>): string {
@@ -287,6 +651,10 @@ function describeDurationBasis(duration: ReturnType<typeof durationStats>): stri
   if (duration.unknownCount > 0) parts.push(`${duration.unknownCount} unknown`);
 
   return `${parts.join("; ")}.`;
+}
+
+function plural(count: number, unit: string): string {
+  return `${count} ${unit}${count === 1 ? "" : "s"}`;
 }
 
 function OngoingBanner({ episodes }: { episodes: Migraine[] }) {

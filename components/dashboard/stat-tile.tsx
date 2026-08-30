@@ -1,3 +1,5 @@
+import { Minus, TrendingDown, TrendingUp } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,17 +12,25 @@ import { cn } from "@/lib/utils";
  * `tone="feature"` is the lavender treatment for the one figure a screen leads
  * with. Eight identically weighted tiles read as a wall of boxes; one featured
  * figure with the rest quiet reads as a summary.
+ *
+ * `trend` adds a direction to a figure that has moved. It is deliberately drawn
+ * in the muted text colour with no red or green: fewer episodes than last month
+ * is not a success the app is entitled to congratulate anyone for, and more of
+ * them is not a failure. The arrow says which way the number went, and the
+ * wording says what it was measured against.
  */
 export function StatTile({
   label,
   value,
   note,
+  trend,
   tone = "default",
   className,
 }: {
   label: string;
   value: string;
   note?: string;
+  trend?: Trend;
   tone?: "default" | "feature";
   className?: string;
 }) {
@@ -46,10 +56,33 @@ export function StatTile({
       >
         {value}
       </p>
+      {trend ? <TrendNote trend={trend} /> : null}
       {note ? (
         <p className="text-caption text-muted-foreground mt-0.5 text-pretty">{note}</p>
       ) : null}
     </div>
+  );
+}
+
+export type Trend = {
+  direction: "up" | "down" | "level";
+  /** Names what the figure moved against, e.g. "1 more than the 30 days before". */
+  label: string;
+};
+
+const TREND_ICONS = {
+  up: TrendingUp,
+  down: TrendingDown,
+  level: Minus,
+} as const;
+
+function TrendNote({ trend }: { trend: Trend }) {
+  const Icon = TREND_ICONS[trend.direction];
+  return (
+    <p className="text-caption text-muted-foreground mt-0.5 flex items-center gap-1.5 text-pretty">
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      {trend.label}
+    </p>
   );
 }
 

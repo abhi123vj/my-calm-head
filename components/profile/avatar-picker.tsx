@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImageUp, Trash2 } from "lucide-react";
+import { Crop, ImageUp, Trash2 } from "lucide-react";
 
+import { AvatarCropper } from "@/components/profile/avatar-cropper";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
-import { shrinkAvatar } from "@/lib/profile/image";
+import {
+  loadAvatarSource,
+  renderAvatar,
+  type AvatarSource,
+  type CropRect,
+} from "@/lib/profile/image";
 import {
   AVATAR_DIMENSION,
   AVATAR_SOURCE_MAX_BYTES,
@@ -18,15 +24,20 @@ import type { Profile } from "@/types/profile";
  * What the form is holding for the picture, as distinct from what is stored.
  * A photo is only written when the form is saved, so choosing one and then
  * navigating away changes nothing - the same way editing the name does.
+ *
+ * `file` is the encoded square that was put into the file input, kept so that a
+ * cancelled second pick can put the first one back - by then the input holds
+ * the raw new file and the staged preview would otherwise be describing bytes
+ * that are no longer there.
  */
 type StagedPicture =
   | { kind: "unchanged" }
-  | { kind: "replace"; previewUrl: string }
+  | { kind: "replace"; file: File; previewUrl: string }
   | { kind: "remove" };
 
 /**
- * The picture half of the profile form: preview, picker, and the flag that
- * asks for a removal.
+ * The picture half of the profile form: preview, picker, cropper, and the flag
+ * that asks for a removal.
  *
  * Everything staged here is local and throwaway, which is why the form mounts
  * it under a `key` that changes on every successful save. Clearing this state
@@ -43,11 +54,17 @@ export function AvatarPicker({
   /** A rejection from the last save, which outlives this component's resets. */
   serverError?: string;
   disabled: boolean;
-  /** Lets the form hold its Save button while an image is being shrunk. */
+  /** Lets the form hold its Save button while a picture is being chosen. */
   onPreparingChange: (preparing: boolean) => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [staged, setStaged] = useState<StagedPicture>({ kind: "unchanged" });
+  const [source, setSource] = useState<AvatarSource | null>(null);
+  // Paired with `source` rather than kept on `staged`, because it only means
+  // anything against the photo it was measured on: a second pick has to open
+  // the cropper fresh, not inherit the last photo's framing.
+  const [crop, setCrop] = useState<CropRect | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [pickError, setPickError] = useState<string | null>(null);
 
@@ -60,14 +77,32 @@ export function AvatarPicker({
     return () => URL.revokeObjectURL(url);
   }, [staged]);
 
-  function setPreparingState(value: boolean) {
-    setPreparing(value);
-    onPreparingChange(value);
+  // The decoded photo outlives the cropper, so it can be reopened for a second
+  // adjustment without decoding again. Freeing it is tied to the state the same
+  // way, which covers both a replacement pick and the remount after a save.
+  useEffect(() => {
+    if (!source) return;
+    return () => source.release();
+  }, [source]);
+
+  // Until the cropper closes there is nothing prepared in the input to submit,
+  // so choosing a photo holds the Save button just as encoding one does.
+  useEffect(() => {
+    onPreparingChange(preparing || cropOpen);
+  }, [preparing, cropOpen, onPreparingChange]);
+
+  function emptyPicker() {
+    if (fileInput.current) fileInput.current.value = "";
   }
 
   function clearPicker() {
-    if (fileInput.current) fileInput.current.value = "";
+    emptyPicker();
     setStaged({ kind: "unchanged" });
+  }
+
+  function forgetSource() {
+    setSource(null);
+    setCrop(null);
   }
 
   function putInPicker(file: File) {
@@ -96,28 +131,79 @@ export function AvatarPicker({
       return;
     }
 
-    setPreparingState(true);
+    setPreparing(true);
     try {
-      const prepared = await shrinkAvatar(file);
+      // Decoded up front rather than inside the cropper, so a file that is not
+      // really an image is refused here instead of opening an empty dialog.
+      const loaded = await loadAvatarSource(file);
+      setSource(loaded);
+      setCrop(null);
+      setCropOpen(true);
+    } catch {
+      setPickError("That image could not be opened. Try a different one.");
+      clearPicker();
+      forgetSource();
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  async function handleCrop(chosen: CropRect) {
+    if (!source) return;
+    setCropOpen(false);
+    setPreparing(true);
+
+    try {
+      const prepared = await renderAvatar(source, chosen);
 
       const problem = checkAvatarFile(prepared);
       if (problem) {
         setPickError(problem);
         clearPicker();
+        forgetSource();
         return;
       }
 
-      // The shrunken file replaces the original in the picker, so the form
-      // submits the small version.
+      // The cropped file replaces the original in the picker, so the form
+      // submits the small square rather than the photo that was picked.
       putInPicker(prepared);
-      setStaged({ kind: "replace", previewUrl: URL.createObjectURL(prepared) });
+      setCrop(chosen);
+      setStaged({
+        kind: "replace",
+        file: prepared,
+        previewUrl: URL.createObjectURL(prepared),
+      });
+    } catch {
+      setPickError("That image could not be prepared. Try a different one.");
+      clearPicker();
+      forgetSource();
     } finally {
-      setPreparingState(false);
+      setPreparing(false);
     }
+  }
+
+  function handleCropClose() {
+    setCropOpen(false);
+
+    // Cancelling an adjustment leaves the staged photo exactly as it was, which
+    // means putting it back: picking a second file has already replaced the
+    // input's contents with the raw pick by this point.
+    if (staged.kind === "replace") {
+      putInPicker(staged.file);
+      return;
+    }
+
+    emptyPicker();
   }
 
   const error = pickError ?? serverError;
   const busy = disabled || preparing;
+
+  // `crop` is what ties the loaded photo to the staged one: it is set when a
+  // crop is accepted and cleared by the next pick, so a second pick that was
+  // cancelled - which leaves the first photo staged but the second one loaded -
+  // correctly offers nothing to adjust.
+  const canAdjust = staged.kind === "replace" && source !== null && crop !== null;
 
   return (
     <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
@@ -165,6 +251,19 @@ export function AvatarPicker({
                 : "Choose photo"}
           </Button>
 
+          {canAdjust ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => setCropOpen(true)}
+            >
+              <Crop aria-hidden />
+              Adjust
+            </Button>
+          ) : null}
+
           {profile.avatar && staged.kind !== "remove" ? (
             <Button
               type="button"
@@ -173,6 +272,7 @@ export function AvatarPicker({
               disabled={busy}
               onClick={() => {
                 clearPicker();
+                forgetSource();
                 setPickError(null);
                 setStaged({ kind: "remove" });
               }}
@@ -190,6 +290,7 @@ export function AvatarPicker({
               disabled={busy}
               onClick={() => {
                 clearPicker();
+                forgetSource();
                 setPickError(null);
               }}
             >
@@ -207,8 +308,8 @@ export function AvatarPicker({
         ) : null}
 
         <p id="avatar-hint" className="text-caption text-muted-foreground">
-          JPEG, PNG, WebP or GIF. Cropped to a square and scaled to{" "}
-          {AVATAR_DIMENSION}px on this device before it is uploaded.
+          JPEG, PNG, WebP or GIF. You choose the square that is kept, and it is
+          scaled to {AVATAR_DIMENSION}px on this device before it is uploaded.
         </p>
 
         {error ? (
@@ -225,6 +326,16 @@ export function AvatarPicker({
           </p>
         ) : null}
       </div>
+
+      <AvatarCropper
+        source={source}
+        initialCrop={crop ?? undefined}
+        open={cropOpen}
+        onOpenChange={(open) => {
+          if (!open) handleCropClose();
+        }}
+        onConfirm={(crop) => void handleCrop(crop)}
+      />
     </div>
   );
 }
