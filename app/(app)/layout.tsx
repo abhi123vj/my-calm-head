@@ -1,14 +1,15 @@
 import { AppHeader } from "@/components/layout/app-header";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { requireSession } from "@/lib/auth/dal";
+import { getCurrentProfileForChrome } from "@/lib/profile/dal";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
-  // The real authorization check. Proxy only does an optimistic redirect.
-  const session = await requireSession();
+  // The real authorization check - it requires the session before reading
+  // anything. Proxy only does an optimistic redirect.
+  const profile = await getCurrentProfileForChrome();
 
   return (
     <div className="flex min-h-svh flex-col">
-      <AppHeader username={session.username} />
+      <AppHeader profile={profile} />
 
       {/* 16px gutters on a phone rather than 24px: at 320px that is 8% of the
           width handed back to the content. `pb-safe-nav` reserves room for the
